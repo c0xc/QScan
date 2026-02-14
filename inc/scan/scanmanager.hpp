@@ -33,7 +33,8 @@ enum class ScanDeviceType
 {
     UNKNOWN,
     SCANNER,     // Hardware scanner device
-    CAMERA       // Camera/webcam device
+    CAMERA,      // Camera/webcam device
+    MOBILE       // Mobile device camera
 };
 
 /**

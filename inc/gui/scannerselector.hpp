@@ -51,12 +51,6 @@ public:
     QString
     selectedDeviceName() const;
 
-    /**
-     * Get the scan mode selected by user.
-     */
-    Document::ScanMode
-    selectedMode() const;
-
 private slots:
 
     void
@@ -69,13 +63,10 @@ private:
 
     ScanManager *m_scan_manager;
     QString m_selected_device;
-    Document::ScanMode m_selected_mode;
 
     // UI elements
     QListWidget *m_device_list;
     QLabel *m_capabilities_label;
-    QRadioButton *m_rb_image_mode;
-    QRadioButton *m_rb_document_mode;
     QPushButton *m_btn_ok;
     QPushButton *m_btn_cancel;
 

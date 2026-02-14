@@ -44,6 +44,8 @@ struct ScanCapabilities
     bool supports_multi_page;          // Can scan multiple pages
     bool supports_auto_feed;           // Has automatic document feeder (ADF)
     bool supports_color_mode;          // Can scan in color
+    bool supports_auto_page_size;      // Can auto-detect page dimensions
+    bool supports_scan_settings;       // Whether scan parameter controls (resolution, page size, etc.) are meaningful
     QList<int> supported_resolutions;  // Available DPI values
     QStringList supported_color_modes; // "Color", "Gray", "BW"
     QSizeF max_scan_area;              // Maximum scan area in mm
@@ -57,6 +59,8 @@ struct ScanCapabilities
         : supports_multi_page(false)
         , supports_auto_feed(false)
         , supports_color_mode(true)
+        , supports_auto_page_size(false)
+        , supports_scan_settings(true)
         , max_scan_area(210.0, 297.0)      // A4
         , default_scan_area(210.0, 297.0)  // A4
         , preview_mode(PreviewMode::SingleImage)
@@ -82,12 +86,16 @@ struct ScanParameters
 {
     int resolution;        // DPI
     QString color_mode;    // "Color", "Gray", or "BW"
-    QSizeF scan_area;      // Scan area in mm
+    QSizeF scan_area;      // Scan area in mm (0,0 = auto-detect if supported)
+    bool use_adf;          // Use automatic document feeder
+    bool auto_page_size;   // Use automatic page size detection
 
     ScanParameters()
         : resolution(300)
         , color_mode("Color")
         , scan_area(210.0, 297.0) // A4
+        , use_adf(false)
+        , auto_page_size(false)
     {
     }
 };

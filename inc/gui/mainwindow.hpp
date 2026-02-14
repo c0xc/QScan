@@ -24,6 +24,7 @@
 #include <QMainWindow>
 #include <QToolBar>
 #include <QStatusBar>
+#include <QLabel>
 #include <QAction>
 #include <QSplitter>
 
@@ -37,6 +38,7 @@
 #include "processing/border_detector.hpp"
 #include "gui/scanpreviewwidget.hpp"
 #include "gui/pagelistwidget.hpp"
+#include "gui/scancontrolpanel.hpp"
 
 /**
  * Main scanning window.
@@ -49,7 +51,6 @@ class MainWindow : public QMainWindow
 public:
 
     MainWindow(ScanSource *source,
-               Document::ScanMode mode,
                QWidget *parent = 0);
 
     ~MainWindow() override;
@@ -81,10 +82,22 @@ private slots:
     onPageSelected(int index);
 
     void
-    onAddPageRequested();
+    onDeletePageRequested(int index);
 
     void
-    onDeletePageRequested(int index);
+    onRotateLeftRequested();
+
+    void
+    onRotateRightRequested();
+
+    void
+    onManualCropRequested();
+
+    void
+    onAutoCropChanged(bool enabled);
+
+    void
+    onAdfModeChanged(bool enabled);
 
     void
     onPreviewFrameReady(const QImage &image);
@@ -106,10 +119,15 @@ private:
 
     // GUI components
     ScanPreviewWidget *m_preview;
-    PageListWidget *m_page_list;  // null in IMAGE_MODE
+    PageListWidget *m_page_list;
+    ScanControlPanel *m_control_panel;
     QSplitter *m_splitter;
     QToolBar *m_toolbar;
     QStatusBar *m_status_bar;
+    QLabel *m_size_status_label;
+    
+    //State
+    bool m_autocrop_enabled;
 
     // Actions
     QAction *m_act_preview;
@@ -131,6 +149,18 @@ private:
 
     QString
     getSaveFileName();
+
+    void
+    showPageList();
+
+    void
+    hidePageList();
+
+    void
+    applyRotationToCurrentPage(int degrees);
+
+    void
+    applyAutoCropToImage(QImage &image);
 
 };
 

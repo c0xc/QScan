@@ -29,6 +29,7 @@
 /**
  * Represents a multi-page scanned document.
  * Manages a collection of ScannedPage objects.
+ * Note: ScanMode is deprecated - the UI now adapts dynamically based on page count.
  */
 class Document : public QObject
 {
@@ -37,12 +38,12 @@ class Document : public QObject
 public:
 
     /**
-     * Scan modes determine UI behavior and default export format.
+     * @deprecated Scan modes are no longer used. UI adapts dynamically based on page count.
      */
     enum ScanMode
     {
-        IMAGE_MODE,    // Single image focus, JPG output
-        DOCUMENT_MODE  // Multi-page support, PDF output
+        IMAGE_MODE,    // Deprecated
+        DOCUMENT_MODE  // Deprecated
     };
     Q_ENUM(ScanMode)
 
@@ -98,13 +99,13 @@ public:
     clear();
 
     /**
-     * Set scan mode.
+     * @deprecated Set scan mode. No longer used - kept for compatibility.
      */
     void
     setScanMode(ScanMode mode);
 
     /**
-     * Get scan mode.
+     * @deprecated Get scan mode. No longer used - kept for compatibility.
      */
     ScanMode
     scanMode() const;

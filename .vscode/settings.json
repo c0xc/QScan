@@ -1,0 +1,29 @@
+{
+    "cmake.buildDirectory": "${workspaceFolder}/build",
+    "files.associations": {
+        "*.hpp": "cpp",
+        "*.cpp": "cpp"
+    },
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "cline.codeStyle": "C++ comments use //no space (e.g., //This is a comment)",
+    "terminal.integrated.env.linux": {
+        "BUILD_HINT": "Use 'bash scripts/build.sh' to build in container"
+    },
+    "tasks.version": "2.0.0",
+    "tasks.tasks": [
+        {
+            "label": "Build QScan (Container)",
+            "type": "shell",
+            "command": "bash scripts/build.sh",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$gcc"],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        }
+    ]
+}

@@ -21,6 +21,7 @@
 #include "scan/scanmanager.hpp"
 #include "scan/sanescandevice.hpp"
 #include "scan/webcamsource.hpp"
+#include "scan/mobilesource.hpp"
 #include "core/classlogger.hpp"
 
 ScanManager::ScanManager(QObject *parent)
@@ -94,6 +95,10 @@ ScanManager::createScanSource(const QString &device_name, QObject *parent)
             Debug(QS("Creating camera device for <%s>", CSTR(info.name)));
             return new WebcamSource(info.name, info.description, parent);
 
+        case ScanDeviceType::MOBILE:
+            Debug(QS("Creating mobile device for <%s>", CSTR(info.name)));
+            return new MobileSource(info.name, info.description, parent);
+
         default:
             Debug(QS("Unknown device type %d for device <%s>", (int)info.type, CSTR(info.name)));
             return 0;
@@ -116,4 +121,9 @@ ScanManager::enumerateCameras()
     QList<ScanDeviceInfo> camera_devices = WebcamSource::enumerateDevices();
     Debug(QS("Camera enumeration returned %d device(s)", camera_devices.count()));
     m_devices.append(camera_devices);
+    
+    // Also enumerate mobile devices
+    QList<ScanDeviceInfo> mobile_devices = MobileSource::enumerateDevices();
+    Debug(QS("Mobile enumeration returned %d device(s)", mobile_devices.count()));
+    m_devices.append(mobile_devices);
 }

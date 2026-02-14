@@ -15,10 +15,16 @@ find_package(Qt6 COMPONENTS Core Gui Widgets QUIET)
 if(Qt6_FOUND)
     message(STATUS "Found Qt6")
     set(QT_VERSION_MAJOR 6)
+    set(QT_FOUND TRUE)
 else()
-    find_package(Qt5 COMPONENTS Core Gui Widgets REQUIRED)
-    message(STATUS "Found Qt5")
-    set(QT_VERSION_MAJOR 5)
+    find_package(Qt5 COMPONENTS Core Gui Widgets QUIET)
+    if(Qt5_FOUND)
+        message(STATUS "Found Qt5")
+        set(QT_VERSION_MAJOR 5)
+        set(QT_FOUND TRUE)
+    else()
+        message(FATAL_ERROR "Neither Qt6 nor Qt5 found. Please install Qt development packages.")
+    endif()
 endif()
 
 # Find SANE
@@ -91,6 +97,7 @@ set(SOURCES
     src/gui_scan_preview_widget.cpp
     src/gui_page_list_widget.cpp
     src/gui_scanner_selector.cpp
+    src/gui_scan_control_panel.cpp
 )
 
 # Add SmartCapture processor only if OpenCV is enabled
@@ -109,6 +116,7 @@ set(HEADERS_WITH_MOC
     inc/gui/scanpreviewwidget.hpp
     inc/gui/pagelistwidget.hpp
     inc/gui/scannerselector.hpp
+    inc/gui/scancontrolpanel.hpp
 )
 
 # Create executable

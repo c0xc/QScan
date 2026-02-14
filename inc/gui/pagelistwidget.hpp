@@ -64,12 +64,6 @@ signals:
     pageSelected(int index);
 
     /**
-     * Emitted when user requests to add a new page.
-     */
-    void
-    addPageRequested();
-
-    /**
      * Emitted when user requests to delete a page.
      */
     void
@@ -79,9 +73,6 @@ private slots:
 
     void
     onItemSelectionChanged();
-
-    void
-    onAddPageClicked();
 
     void
     onDeletePageClicked();
@@ -96,7 +87,6 @@ private:
 
     Document *m_document;
     QListWidget *m_list;
-    QPushButton *m_btn_add;
     QPushButton *m_btn_delete;
 
     void

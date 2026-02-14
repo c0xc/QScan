@@ -61,9 +61,6 @@ public:
     ScanCapabilities
     capabilities() const override;
 
-    QStringList
-    supportedFormats() const override;
-
     QString
     deviceName() const override;
 
@@ -82,14 +79,29 @@ public:
     bool
     isScanning() const override;
 
+    /**
+     * Check if the device is currently open/initialized.
+     * Returns true if the SANE device handle is valid.
+     */
+    bool
+    isOpen() const override;
+
+    /**
+     * Get the physical size of the last scanned document in millimeters.
+     * Calculated from image dimensions and resolution reported by SANE.
+     */
+    QSizeF
+    currentDocumentSize() const override;
+
 private:
 
     QString m_device_name;
     QString m_device_desc;
     ScanCapabilities m_capabilities;
-    SANE_Handle *m_handle;
+    SANE_Handle m_handle;  // SANE device handle (void*)
     bool m_is_scanning;
     bool m_is_initialized;
+    QSizeF m_current_document_size;  // Physical size of last scanned document in mm
 
     /**
      * Query device capabilities from SANE.

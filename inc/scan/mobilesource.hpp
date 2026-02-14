@@ -18,43 +18,37 @@
 **
 ****************************************************************************/
 
-#ifndef SCAN_WEBCAMSOURCE_HPP
-#define SCAN_WEBCAMSOURCE_HPP
+#ifndef SCAN_MOBILESOURCE_HPP
+#define SCAN_MOBILESOURCE_HPP
 
-#include <QTimer>
-#include <memory>
 #include "scan/scansource.hpp"
 #include "scan/scanmanager.hpp"
 
 /**
- * Camera/webcam capture implementation.
- * Platform-agnostic interface - implementation varies by platform and build configuration.
- * Implementation details are hidden in the source file.
+ * Mobile device capture implementation (stub).
+ * Placeholder for mobile camera integration.
  */
-class WebcamSource : public ScanSource
+class MobileSource : public ScanSource
 {
     Q_OBJECT
 
 public:
 
     /**
-     * Static method to enumerate available camera devices.
+     * Static method to enumerate available mobile devices.
      * Called by ScanManager during initialization.
-     * Platform-specific implementation.
      */
     static QList<ScanDeviceInfo>
     enumerateDevices();
 
     /**
      * Constructor.
-     * @param device_identifier Platform-specific device identifier
-     * @param device_description User-friendly device description
      */
-    WebcamSource(const QString &device_identifier,
+    MobileSource(const QString &device_identifier,
                  const QString &device_description,
                  QObject *parent = 0);
 
-    ~WebcamSource() override;
+    ~MobileSource() override;
 
     // ScanSource interface implementation
     ScanCapabilities
@@ -79,6 +73,9 @@ public:
     isScanning() const override;
 
     bool
+    isOpen() const override;
+
+    bool
     startPreview() override;
 
     void
@@ -86,18 +83,6 @@ public:
 
     bool
     isPreviewActive() const override;
-
-    /**
-     * Check if the device is currently open/initialized.
-     * Returns true if the camera device is properly initialized.
-     */
-    bool
-    isOpen() const override;
-
-private slots:
-
-    void
-    onPreviewTimer();
 
 private:
 
@@ -107,29 +92,7 @@ private:
     bool m_is_scanning;
     bool m_is_initialized;
     bool m_live_preview_active;
-    QTimer *m_preview_timer;
-    int m_frame_fail_count;
-
-    //Platform-specific implementation data (opaque pointer with automatic cleanup)
-    struct PlatformData;
-    std::unique_ptr<PlatformData> m_platform_data;
-
-    //Friend declarations for platform-specific implementations
-    friend bool initialize_GStreamer(WebcamSource *source, const QString &device_id);
-    friend bool initialize_QtCamera(WebcamSource *source, const QString &device_id);
-
-    /**
-     * Query camera capabilities.
-     */
-    void
-    queryCapabilities();
-
-    /**
-     * Capture a single frame from camera.
-     */
-    QImage
-    captureFrame();
 
 };
 
-#endif // SCAN_WEBCAMSOURCE_HPP
+#endif // SCAN_MOBILESOURCE_HPP

@@ -53,12 +53,6 @@ public:
     capabilities() const = 0;
 
     /**
-     * Returns supported output formats (e.g., "JPG", "PNG", "PDF").
-     */
-    virtual QStringList
-    supportedFormats() const = 0;
-
-    /**
      * Returns the device name/identifier.
      */
     virtual QString
@@ -98,35 +92,46 @@ public:
     isScanning() const = 0;
 
     /**
-     * Start live preview stream.
-     * Only meaningful for sources with PreviewMode::LiveStream.
-     * The source will emit previewFrameReady() periodically.
-     * Default implementation does nothing.
-     */
-    virtual void
-    startLivePreview() {}
-
-    /**
-     * Stop live preview stream.
-     * Default implementation does nothing.
-     */
-    virtual void
-    stopLivePreview() {}
-
-    /**
-     * Check if live preview is currently active.
+     * Check if the device is currently open/initialized.
+     * Returns true if the device handle is valid and ready for operations.
      */
     virtual bool
-    isLivePreviewActive() const { return false; }
+    isOpen() const = 0;
 
     /**
-     * Request a single preview frame synchronously.
-     * For scanners: triggers a low-res preview scan.
-     * For webcams: captures current frame from stream.
-     * Returns empty image if not supported or on error.
+     * Start preview operation (asynchronous).
+     * For LiveStream sources (webcams/mobile): starts continuous video stream.
+     * For SingleImage sources (scanners): triggers single low-res scan.
+     * Preview images are delivered via previewFrameReady() signal.
+     * Returns true if preview started successfully, false otherwise.
      */
-    virtual QImage
-    requestPreviewFrame() { return QImage(); }
+    virtual bool
+    startPreview() { return false; }
+
+    /**
+     * Stop preview operation.
+     * For LiveStream sources: stops video stream.
+     * For SingleImage sources: no-op (single scan already completed).
+     */
+    virtual void
+    stopPreview() {}
+
+    /**
+     * Check if preview is currently active.
+     * For LiveStream sources: returns true while streaming.
+     * For SingleImage sources: returns false (single scans complete immediately).
+     */
+    virtual bool
+    isPreviewActive() const { return false; }
+
+    /**
+     * Get the physical size of the last scanned document in millimeters.
+     * Returns QSizeF() if no document has been scanned or size is unknown.
+     * For scanners: calculated from image dimensions and resolution.
+     * For cameras: may return empty size if not applicable.
+     */
+    virtual QSizeF
+    currentDocumentSize() const;
 
 signals:
 

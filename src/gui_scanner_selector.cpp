@@ -19,22 +19,39 @@
 ****************************************************************************/
 
 #include "gui/scannerselector.hpp"
+#include <QIcon>
+#include <QStyle>
 
 ScannerSelector::ScannerSelector(ScanManager *manager, QWidget *parent)
                : QDialog(parent),
-                 m_scan_manager(manager),
-                 m_selected_mode(Document::IMAGE_MODE)
+                 m_scan_manager(manager)
 {
     setWindowTitle(tr("Select Scanner"));
     setupUi();
     
-    // Populate device list
+    // Populate device list with type icons
     QList<ScanDeviceInfo> devices = m_scan_manager->availableDevices();
     foreach (const ScanDeviceInfo &dev, devices)
     {
-        QString display = dev.description + " (" + dev.typeString() + ")";
+        QString display = dev.description;
         QListWidgetItem *item = new QListWidgetItem(display);
         item->setData(Qt::UserRole, dev.name);
+        item->setData(Qt::UserRole + 1, (int)dev.type);
+        
+        // Add type icon and label
+        if (dev.type == ScanDeviceType::SCANNER)
+        {
+            // Use printer icon for scanner
+            QIcon icon = style()->standardIcon(QStyle::SP_FileDialogDetailedView);
+            item->setIcon(icon);
+            item->setText(QString("🖨️ %1").arg(display));
+        }
+        else if (dev.type == ScanDeviceType::CAMERA)
+        {
+            // Use camera icon
+            item->setText(QString("📷 %1").arg(display));
+        }
+        
         m_device_list->addItem(item);
     }
     
@@ -50,12 +67,6 @@ QString
 ScannerSelector::selectedDeviceName() const
 {
     return m_selected_device;
-}
-
-Document::ScanMode
-ScannerSelector::selectedMode() const
-{
-    return m_selected_mode;
 }
 
 void
@@ -78,16 +89,6 @@ ScannerSelector::onDeviceSelectionChanged()
 void
 ScannerSelector::onOkClicked()
 {
-    // Get selected mode
-    if (m_rb_document_mode->isChecked())
-    {
-        m_selected_mode = Document::DOCUMENT_MODE;
-    }
-    else
-    {
-        m_selected_mode = Document::IMAGE_MODE;
-    }
-    
     accept();
 }
 
@@ -101,30 +102,26 @@ ScannerSelector::setupUi()
     main_layout->addWidget(lbl_devices);
     
     m_device_list = new QListWidget;
+    m_device_list->setIconSize(QSize(24, 24));
     main_layout->addWidget(m_device_list);
     connect(m_device_list, SIGNAL(currentRowChanged(int)),
             this, SLOT(onDeviceSelectionChanged()));
+    connect(m_device_list, SIGNAL(itemDoubleClicked(QListWidgetItem*)),
+            this, SLOT(onOkClicked()));
     
     // Capabilities display
     m_capabilities_label = new QLabel;
     m_capabilities_label->setWordWrap(true);
+    m_capabilities_label->setStyleSheet("QLabel { color: #666; font-size: 10pt; }");
     main_layout->addWidget(m_capabilities_label);
-    
-    // Scan mode selection
-    QLabel *lbl_mode = new QLabel(tr("Scan Mode:"));
-    main_layout->addWidget(lbl_mode);
-    
-    m_rb_image_mode = new QRadioButton(tr("Image Mode (single scan, JPG/PNG)"));
-    m_rb_image_mode->setChecked(true);
-    main_layout->addWidget(m_rb_image_mode);
-    
-    m_rb_document_mode = new QRadioButton(tr("Document Mode (multi-page, PDF)"));
-    main_layout->addWidget(m_rb_document_mode);
     
     // Buttons
     QHBoxLayout *button_layout = new QHBoxLayout;
+    button_layout->addStretch();
+    
     m_btn_ok = new QPushButton(tr("OK"));
     m_btn_ok->setEnabled(false);
+    m_btn_ok->setDefault(true);
     connect(m_btn_ok, SIGNAL(clicked()), this, SLOT(onOkClicked()));
     button_layout->addWidget(m_btn_ok);
     
@@ -134,12 +131,34 @@ ScannerSelector::setupUi()
     
     main_layout->addLayout(button_layout);
     
-    resize(500, 400);
+    resize(500, 350);
 }
 
 void
 ScannerSelector::updateCapabilitiesDisplay()
 {
-    // TODO: Query capabilities from selected device and display
-    m_capabilities_label->setText(tr("Device selected. Click OK to continue."));
+    QListWidgetItem *item = m_device_list->currentItem();
+    if (!item)
+    {
+        m_capabilities_label->clear();
+        return;
+    }
+    
+    ScanDeviceType type = (ScanDeviceType)item->data(Qt::UserRole + 1).toInt();
+    
+    QString info;
+    if (type == ScanDeviceType::SCANNER)
+    {
+        info = tr("Scanner device selected. Click OK to continue.");
+    }
+    else if (type == ScanDeviceType::CAMERA)
+    {
+        info = tr("Camera device selected. Click OK to continue.");
+    }
+    else
+    {
+        info = tr("Device selected. Click OK to continue.");
+    }
+    
+    m_capabilities_label->setText(info);
 }

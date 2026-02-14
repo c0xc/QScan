@@ -66,14 +66,13 @@ PageListWidget::onItemSelectionChanged()
     int index = selectedPageIndex();
     if (index >= 0)
     {
+        m_btn_delete->setEnabled(true);
         emit pageSelected(index);
     }
-}
-
-void
-PageListWidget::onAddPageClicked()
-{
-    emit addPageRequested();
+    else
+    {
+        m_btn_delete->setEnabled(false);
+    }
 }
 
 void
@@ -106,6 +105,7 @@ void
 PageListWidget::setupUi()
 {
     QVBoxLayout *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(4, 4, 4, 4);
     
     // List widget
     m_list = new QListWidget;
@@ -118,18 +118,11 @@ PageListWidget::setupUi()
     connect(m_list, SIGNAL(itemSelectionChanged()),
             this, SLOT(onItemSelectionChanged()));
     
-    // Buttons
-    QHBoxLayout *button_layout = new QHBoxLayout;
-    
-    m_btn_add = new QPushButton(tr("Add Page"));
-    connect(m_btn_add, SIGNAL(clicked()), this, SLOT(onAddPageClicked()));
-    button_layout->addWidget(m_btn_add);
-    
+    // Delete button
     m_btn_delete = new QPushButton(tr("Delete Page"));
+    m_btn_delete->setEnabled(false); // Disabled until a page is selected
     connect(m_btn_delete, SIGNAL(clicked()), this, SLOT(onDeletePageClicked()));
-    button_layout->addWidget(m_btn_delete);
-    
-    layout->addLayout(button_layout);
+    layout->addWidget(m_btn_delete);
 }
 
 void

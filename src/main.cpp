@@ -55,8 +55,7 @@ main(int argc, char *argv[])
 
     // Create scan source
     QString device_name = selector.selectedDeviceName();
-    Document::ScanMode scan_mode = selector.selectedMode();
-    Debug(QS("Selected device: <%s>, scan_mode: %d", CSTR(device_name), (int)scan_mode));
+    Debug(QS("Selected device: <%s>", CSTR(device_name)));
 
     ScanSource *scan_source = scan_manager.createScanSource(device_name);
     if (!scan_source)
@@ -79,7 +78,7 @@ main(int argc, char *argv[])
     Debug(QS("Scan source initialized successfully for device <%s>", CSTR(device_name)));
 
     // Create and show main window
-    MainWindow *main_window = new MainWindow(scan_source, scan_mode);
+    MainWindow *main_window = new MainWindow(scan_source);
     main_window->show();
 
     // Run event loop

@@ -9,7 +9,7 @@ set -e  # Exit on error
 
 # Base container image name (Qt environment)
 BASE_IMAGE="qt-6.4-fedora-36"
-BASE_IMAGE="qt-6.10.1-fedora"
+#BASE_IMAGE="qt-6.10.1-fedora"
 
 # Build image name (with QScan dependencies)
 BUILD_IMAGE="qscan-fedora-36"
@@ -34,46 +34,46 @@ if ! command -v podman &> /dev/null; then
     exit 1
 fi
 
-# Check if the base Qt container image exists
-if ! podman image exists "$BASE_IMAGE"; then
-    echo "Warning: Base container image '$BASE_IMAGE' not found"
-    echo "Falling back to local build..."
-    
-    # Try local build with CMake
-    if command -v cmake &> /dev/null; then
-        echo "Building with CMake..."
-        mkdir -p build
-        cd build
-        cmake ..
-        make -j$(nproc)
-        cd ..
-        echo "Build complete. Binary is in build/qscan"
-        
-        # Create AppImage if requested
-        if [ "$CREATE_APPIMAGE" = "true" ]; then
-            echo "Creating AppImage..."
-            bash "$(dirname "$0")/create-appimage.sh"
-        fi
-    elif command -v qmake &> /dev/null; then
-        echo "Building with qmake..."
-        mkdir -p build
-        cd build
-        qmake ..
-        make -j$(nproc)
-        cd ..
-        echo "Build complete. Binary is in build/qscan"
-        
-        # Create AppImage if requested
-        if [ "$CREATE_APPIMAGE" = "true" ]; then
-            echo "Creating AppImage..."
-            bash "$(dirname "$0")/create-appimage.sh"
-        fi
-    else
-        echo "Error: Neither cmake nor qmake found"
-        exit 1
-    fi
-    exit 0
-fi
+## Check if the base Qt container image exists
+#if ! podman image exists "$BASE_IMAGE"; then
+#    echo "Warning: Base container image '$BASE_IMAGE' not found"
+#    echo "Falling back to local build..."
+#    
+#    # Try local build with CMake
+#    if command -v cmake &> /dev/null; then
+#        echo "Building with CMake..."
+#        mkdir -p build
+#        cd build
+#        cmake ..
+#        make -j$(nproc)
+#        cd ..
+#        echo "Build complete. Binary is in build/qscan"
+#        
+#        # Create AppImage if requested
+#        if [ "$CREATE_APPIMAGE" = "true" ]; then
+#            echo "Creating AppImage..."
+#            bash "$(dirname "$0")/create-appimage.sh"
+#        fi
+#    elif command -v qmake &> /dev/null; then
+#        echo "Building with qmake..."
+#        mkdir -p build
+#        cd build
+#        qmake ..
+#        make -j$(nproc)
+#        cd ..
+#        echo "Build complete. Binary is in build/qscan"
+#        
+#        # Create AppImage if requested
+#        if [ "$CREATE_APPIMAGE" = "true" ]; then
+#            echo "Creating AppImage..."
+#            bash "$(dirname "$0")/create-appimage.sh"
+#        fi
+#    else
+#        echo "Error: Neither cmake nor qmake found"
+#        exit 1
+#    fi
+#    exit 0
+#fi
 
 # Check if we need to rebuild the container image
 if [ "$REBUILD_CONTAINER" = true ]; then
