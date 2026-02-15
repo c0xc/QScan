@@ -47,7 +47,7 @@ ScanManager::initialize()
     Debug(QS("Enumerating camera devices..."));
     enumerateCameras();
 
-    Debug(QS("Initialization complete, total %d device(s) found", m_devices.count()));
+    Debug(QS("Initialization complete, total %lld device(s) found", static_cast<long long>(m_devices.count())));
     return true;  // Always succeed - even if no devices found
 }
 
@@ -110,7 +110,7 @@ ScanManager::enumerateScanners()
 {
     // Call static enumeration method from scanner implementation
     QList<ScanDeviceInfo> scanner_devices = ScannerSource::enumerateDevices();
-    Debug(QS("Scanner enumeration returned %d device(s)", scanner_devices.count()));
+    Debug(QS("Scanner enumeration returned %lld device(s)", static_cast<long long>(scanner_devices.count())));
     m_devices.append(scanner_devices);
 }
 
@@ -119,11 +119,11 @@ ScanManager::enumerateCameras()
 {
     // Call static enumeration method from camera implementation
     QList<ScanDeviceInfo> camera_devices = WebcamSource::enumerateDevices();
-    Debug(QS("Camera enumeration returned %d device(s)", camera_devices.count()));
+    Debug(QS("Camera enumeration returned %lld device(s)", static_cast<long long>(camera_devices.count())));
     m_devices.append(camera_devices);
     
     // Also enumerate mobile devices
     QList<ScanDeviceInfo> mobile_devices = MobileSource::enumerateDevices();
-    Debug(QS("Mobile enumeration returned %d device(s)", mobile_devices.count()));
+    Debug(QS("Mobile enumeration returned %lld device(s)", static_cast<long long>(mobile_devices.count())));
     m_devices.append(mobile_devices);
 }

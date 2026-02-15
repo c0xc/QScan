@@ -309,7 +309,7 @@ enumerateDevices_GStreamer()
     gst_device_monitor_stop(monitor);
     gst_object_unref(monitor);
 
-    Debug(QS("Enumeration complete, found %d GStreamer webcam(s)", devices.size()));
+    Debug(QS("Enumeration complete, found %lld GStreamer webcam(s)", static_cast<long long>(devices.size())));
     
     return devices;
 }

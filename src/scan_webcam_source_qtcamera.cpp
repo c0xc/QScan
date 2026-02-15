@@ -144,7 +144,7 @@ enumerateDevices_QtCamera()
     //Get list of available cameras from Qt6
     QList<QCameraDevice> camera_devices = QMediaDevices::videoInputs();
     
-    Debug(QS("Found %d camera device(s)", camera_devices.size()));
+    Debug(QS("Found %lld camera device(s)", static_cast<long long>(camera_devices.size())));
 
     for (int i = 0; i < camera_devices.size(); ++i)
     {
@@ -162,7 +162,7 @@ enumerateDevices_QtCamera()
         devices.append(info);
     }
 
-    Debug(QS("Enumeration complete, found %d Qt6 webcam(s)", devices.size()));
+    Debug(QS("Enumeration complete, found %lld Qt6 webcam(s)", static_cast<long long>(devices.size())));
     
     return devices;
 }

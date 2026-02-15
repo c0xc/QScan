@@ -55,11 +55,16 @@ WebcamSource::WebcamSource(const QString &device_identifier,
     m_capabilities.supports_scan_settings = false;  //Webcams don't need scan parameter controls
 
     //Prefer GStreamer if available, otherwise fall back to QtCamera
+    const char *backend_name = "none";
 #ifdef USE_GSTREAMER
     m_backend = createWebcamBackend_GStreamer();
+    backend_name = "GStreamer";
 #elif defined(USE_QTCAMERA)
     m_backend = createWebcamBackend_QtCamera();
+    backend_name = "QtCamera";
 #endif
+
+    Debug(QS("WebcamSource: backend active = %s", backend_name));
 
     m_preview_timer = new QTimer(this);
     m_preview_timer->setInterval(33); //~30 fps
@@ -77,14 +82,19 @@ QList<ScanDeviceInfo>
 WebcamSource::enumerateDevices()
 {
 #ifdef USE_GSTREAMER
-    return enumerateDevices_GStreamer();
-#endif
-
-#ifdef USE_QTCAMERA
-    return enumerateDevices_QtCamera();
-#endif
-
+    Debug(QS("Enumerating webcam devices using backend=GStreamer"));
+    QList<ScanDeviceInfo> devices = enumerateDevices_GStreamer();
+    Debug(QS("Webcam enumeration (GStreamer) returned %lld device(s)", static_cast<long long>(devices.size())));
+    return devices;
+#elif defined(USE_QTCAMERA)
+    Debug(QS("Enumerating webcam devices using backend=QtCamera"));
+    QList<ScanDeviceInfo> devices = enumerateDevices_QtCamera();
+    Debug(QS("Webcam enumeration (QtCamera) returned %lld device(s)", static_cast<long long>(devices.size())));
+    return devices;
+#else
+    Debug(QS("Webcam enumeration: no backend compiled in"));
     return QList<ScanDeviceInfo>();
+#endif
 }
 
 ScanCapabilities
@@ -121,6 +131,13 @@ WebcamSource::initialize()
     }
 
     Debug(QS("Initializing <%s>...", CSTR(m_device_identifier)));
+#ifdef USE_GSTREAMER
+    Debug(QS("WebcamSource::initialize: backend=GStreamer, device=<%s>", CSTR(m_device_identifier)));
+#elif defined(USE_QTCAMERA)
+    Debug(QS("WebcamSource::initialize: backend=QtCamera, device=<%s>", CSTR(m_device_identifier)));
+#else
+    Debug(QS("WebcamSource::initialize: backend=none, device=<%s>", CSTR(m_device_identifier)));
+#endif
 
     if (!m_backend->initialize(m_device_identifier))
         return false;
@@ -149,6 +166,7 @@ WebcamSource::startScan(const ScanParameters &params)
     }
     else
     {
+        Debug(QS("startScan: failed to capture frame from <%s>", CSTR(m_device_identifier)));
         emit scanError("Failed to capture frame from webcam");
     }
     
