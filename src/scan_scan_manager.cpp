@@ -18,10 +18,10 @@
 **
 ****************************************************************************/
 
-#include "scan/scanmanager.hpp"
-#include "scan/sanescandevice.hpp"
-#include "scan/webcamsource.hpp"
-#include "scan/mobilesource.hpp"
+#include "scan/scan_manager.hpp"
+#include "scan/scanner_source.hpp"
+#include "scan/webcam_source.hpp"
+#include "scan/mobile_source.hpp"
 #include "core/classlogger.hpp"
 
 ScanManager::ScanManager(QObject *parent)
@@ -89,7 +89,7 @@ ScanManager::createScanSource(const QString &device_name, QObject *parent)
     {
         case ScanDeviceType::SCANNER:
             Debug(QS("Creating scanner device for <%s>", CSTR(info.name)));
-            return new SANEScanDevice(info.name, info.description, parent);
+            return new ScannerSource(info.name, info.description, parent);
 
         case ScanDeviceType::CAMERA:
             Debug(QS("Creating camera device for <%s>", CSTR(info.name)));
@@ -109,7 +109,7 @@ void
 ScanManager::enumerateScanners()
 {
     // Call static enumeration method from scanner implementation
-    QList<ScanDeviceInfo> scanner_devices = SANEScanDevice::enumerateDevices();
+    QList<ScanDeviceInfo> scanner_devices = ScannerSource::enumerateDevices();
     Debug(QS("Scanner enumeration returned %d device(s)", scanner_devices.count()));
     m_devices.append(scanner_devices);
 }

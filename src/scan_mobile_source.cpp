@@ -18,7 +18,7 @@
 **
 ****************************************************************************/
 
-#include "scan/mobilesource.hpp"
+#include "scan/mobile_source.hpp"
 #include "core/classlogger.hpp"
 
 MobileSource::MobileSource(const QString &device_identifier,
@@ -29,7 +29,10 @@ MobileSource::MobileSource(const QString &device_identifier,
               m_device_description(device_description),
               m_is_scanning(false),
               m_is_initialized(false),
-              m_live_preview_active(false)
+                            m_live_preview_active(false),
+                            m_preview_timer(nullptr),
+                            m_backend_url("http://127.0.0.1:8765"),
+                            m_session_id()
 {
     //Configure capabilities for mobile video input
     m_capabilities.preview_mode = PreviewMode::LiveStream;
@@ -54,7 +57,7 @@ MobileSource::enumerateDevices()
     QList<ScanDeviceInfo> devices;
     // For now, add a dummy mobile device as a stub
     // In a real implementation, this would enumerate actual mobile devices
-    ScanDeviceInfo info("mobile:default", "Mobile Camera (Stub)", ScanDeviceType::CAMERA);
+    ScanDeviceInfo info("mobile:default", "Mobile Camera (Stub)", ScanDeviceType::MOBILE);
     devices.append(info);
     return devices;
 }
@@ -152,13 +155,15 @@ MobileSource::startPreview()
 
     Debug(QS("Starting mobile preview stream"));
     
-    //Start mobile camera preview (stub emits single dummy frame)
+    //Start mobile preview (stub emits frames using timer)
     m_live_preview_active = true;
-    
-    //Emit dummy frame for stub implementation
-    QImage dummy_frame(640, 480, QImage::Format_RGB888);
-    dummy_frame.fill(Qt::darkGray);
-    emit previewFrameReady(dummy_frame);
+
+    if (!m_preview_timer)
+    {
+        m_preview_timer = new QTimer(this);
+        connect(m_preview_timer, SIGNAL(timeout()), this, SLOT(onPreviewTimer()));
+    }
+    m_preview_timer->start(100);
     
     return true;
 }
@@ -170,6 +175,8 @@ MobileSource::stopPreview()
         return;
 
     Debug(QS("Stopping mobile preview stream"));
+    if (m_preview_timer)
+        m_preview_timer->stop();
     m_live_preview_active = false;
 }
 
@@ -177,4 +184,16 @@ bool
 MobileSource::isPreviewActive() const
 {
     return m_live_preview_active;
+}
+
+void
+MobileSource::onPreviewTimer()
+{
+    if (!m_live_preview_active)
+        return;
+
+    //Stub frame that will later be replaced by backend stream
+    QImage frame(640, 480, QImage::Format_RGB888);
+    frame.fill(Qt::darkGray);
+    emit previewFrameReady(frame);
 }

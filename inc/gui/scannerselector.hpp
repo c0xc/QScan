@@ -29,7 +29,7 @@
 #include <QPushButton>
 #include <QLabel>
 
-#include "scan/scanmanager.hpp"
+#include "scan/scan_manager.hpp"
 #include "document/document.hpp"
 
 /**

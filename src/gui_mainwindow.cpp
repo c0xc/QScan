@@ -188,7 +188,14 @@ MainWindow::onPageScanned(const QImage &image, int page_number)
             QString size_text = QString("%1 x %2 mm")
                                 .arg(size.width(), 0, 'f', 1)
                                 .arg(size.height(), 0, 'f', 1);
-            m_size_status_label->setText(tr("Document size: %1").arg(size_text));
+
+            QString note;
+            if (m_scan_source->documentSizeWasAutoDetected())
+                note = tr(" (autodetected)");
+            else if (m_scan_source->documentSizeIsReported())
+                note = tr(" (reported by device)");
+
+            m_size_status_label->setText(tr("Document size: %1%2").arg(size_text, note));
         }
     }
 

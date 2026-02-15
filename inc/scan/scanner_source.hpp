@@ -18,39 +18,33 @@
 **
 ****************************************************************************/
 
-#ifndef SCAN_MOBILESOURCE_HPP
-#define SCAN_MOBILESOURCE_HPP
+#ifndef SCAN_SCANNER_SOURCE_HPP
+#define SCAN_SCANNER_SOURCE_HPP
 
-#include "scan/scansource.hpp"
-#include "scan/scanmanager.hpp"
+#include <memory>
+#include <QThread>
 
-/**
- * Mobile device capture implementation (stub).
- * Placeholder for mobile camera integration.
- */
-class MobileSource : public ScanSource
+#include "scan/scan_source.hpp"
+#include "scan/scan_device_info.hpp"
+
+class ScannerBackend;
+
+//Image source for flatbed/ADF scanners
+class ScannerSource : public ScanSource
 {
     Q_OBJECT
 
 public:
 
-    /**
-     * Static method to enumerate available mobile devices.
-     * Called by ScanManager during initialization.
-     */
     static QList<ScanDeviceInfo>
     enumerateDevices();
 
-    /**
-     * Constructor.
-     */
-    MobileSource(const QString &device_identifier,
-                 const QString &device_description,
-                 QObject *parent = 0);
+    ScannerSource(const QString &device_name,
+                 const QString &device_desc,
+                 QObject *parent = nullptr);
 
-    ~MobileSource() override;
+    ~ScannerSource() override;
 
-    // ScanSource interface implementation
     ScanCapabilities
     capabilities() const override;
 
@@ -84,15 +78,30 @@ public:
     bool
     isPreviewActive() const override;
 
+    QSizeF
+    currentDocumentSize() const override;
+
+    bool
+    documentSizeIsReported() const override;
+
+    bool
+    documentSizeWasAutoDetected() const override;
+
 private:
 
-    QString m_device_identifier;
-    QString m_device_description;
-    ScanCapabilities m_capabilities;
+    QString m_device_name;
+    QString m_device_desc;
     bool m_is_scanning;
     bool m_is_initialized;
-    bool m_live_preview_active;
+
+    bool m_last_auto_page_size;
+
+    bool m_preview_active;
+    QThread *m_preview_thread;
+
+    //Backend instance (owns backend-private state)
+    std::unique_ptr<ScannerBackend> m_backend;
 
 };
 
-#endif // SCAN_MOBILESOURCE_HPP
+#endif //SCAN_SCANNER_SOURCE_HPP

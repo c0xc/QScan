@@ -1,3 +1,7 @@
+# QScan
+# qmake config - for Qt5 compatibility
+# possibly reduced feature set (as opposed to our cmake config)
+
 QT += core gui widgets
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
@@ -36,8 +40,10 @@ SOURCES += \
     src/processing_rotate_processor.cpp \
     src/processing_border_detector.cpp \
     src/processing_smart_capture_processor.cpp \
-    src/scan_sane_scan_device.cpp \
+    src/scan_scanner_source.cpp \
+    src/scan_scanner_backend_sane.cpp \
     src/scan_webcam_source.cpp \
+    src/scan_mobile_source.cpp \
     src/scan_scan_manager.cpp \
     src/document_scanned_page.cpp \
     src/document_document.cpp \
@@ -54,11 +60,15 @@ HEADERS += \
     inc/core/classlogger.hpp \
     inc/core/settingsmanager.hpp \
     inc/core/profilesettings.hpp \
-    inc/scan/scancapabilities.hpp \
-    inc/scan/scansource.hpp \
-    inc/scan/sanescandevice.hpp \
-    inc/scan/webcamsource.hpp \
-    inc/scan/scanmanager.hpp \
+    inc/scan/scan_capabilities.hpp \
+    inc/scan/scan_device_info.hpp \
+    inc/scan/scan_source.hpp \
+    inc/scan/scanner_backend.hpp \
+    inc/scan/scanner_source.hpp \
+    inc/scan/webcam_backend.hpp \
+    inc/scan/webcam_source.hpp \
+    inc/scan/scan_manager.hpp \
+    inc/scan/mobile_source.hpp \
     inc/document/scannedpage.hpp \
     inc/document/document.hpp \
     inc/document/documentexporter.hpp \

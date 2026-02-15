@@ -21,7 +21,8 @@
 //GStreamer implementation for webcam capture
 #ifdef USE_GSTREAMER
 
-#include "scan/webcamsource.hpp"
+#include "scan/webcam_backend.hpp"
+#include "scan/scan_device_info.hpp"
 #include "core/classlogger.hpp"
 #include <gst/gst.h>
 #include <gst/app/gstappsink.h>
@@ -55,17 +56,159 @@ struct GstElementDeleter
     }
 };
 
-//GStreamer pipeline elements for webcam capture with automatic cleanup
-struct WebcamSource::PlatformData
+class GStreamerWebcamBackend : public WebcamBackend
 {
-    std::unique_ptr<GstElement, GstPipelineDeleter> pipeline;
-    std::unique_ptr<GstElement, GstElementDeleter> sink;
-    bool gst_initialized;
+public:
 
-    PlatformData()
-        : pipeline(nullptr), sink(nullptr), gst_initialized(false)
-    {}
+    GStreamerWebcamBackend()
+        : m_pipeline(nullptr),
+          m_sink(nullptr),
+          m_gst_initialized(false)
+    {
+    }
+
+    ~GStreamerWebcamBackend() override
+    {
+        //State cleanup happens via smart-pointer deleters
+        m_sink.reset();
+        m_pipeline.reset();
+    }
+
+    bool
+    initialize(const QString &device_id) override
+    {
+        //Init GStreamer once
+        if (!m_gst_initialized)
+        {
+            GError *error = 0;
+            if (!gst_init_check(0, 0, &error))
+            {
+                Debug(QS("gst_init_check() FAILED: %s", error ? error->message : "unknown error"));
+                if (error)
+                    g_error_free(error);
+                return false;
+            }
+            m_gst_initialized = true;
+            Debug(QS("GStreamer initialized successfully"));
+        }
+
+        //Build pipeline: v4l2src->videoconvert->RGB->appsink
+        QString pipeline_str = QString("v4l2src device=%1 ! videoconvert ! video/x-raw,format=RGB ! appsink name=sink").arg(device_id);
+
+        GError *error = 0;
+        GstElement *pipeline_raw = gst_parse_launch(pipeline_str.toUtf8().constData(), &error);
+        if (!pipeline_raw)
+        {
+            Debug(QS("FAILED to create GStreamer pipeline: %s", error ? error->message : "unknown error"));
+            if (error)
+                g_error_free(error);
+            return false;
+        }
+        //gst_parse_launch may set error even on success (warnings)
+        if (error)
+        {
+            Debug(QS("GStreamer pipeline warning: %s", error->message));
+            g_error_free(error);
+        }
+        m_pipeline.reset(pipeline_raw);
+
+        GstElement *sink_raw = gst_bin_get_by_name(GST_BIN(m_pipeline.get()), "sink");
+        if (!sink_raw)
+        {
+            Debug(QS("FAILED to get appsink element from pipeline"));
+            m_pipeline.reset();
+            return false;
+        }
+        m_sink.reset(sink_raw);
+
+        //Drop old frames, keep latest
+        g_object_set(m_sink.get(), "max-buffers", 1, "drop", TRUE, NULL);
+
+        Debug(QS("Successfully created GStreamer pipeline for <%s>", CSTR(device_id)));
+        return true;
+    }
+
+    QImage
+    captureFrame() override
+    {
+        if (!m_pipeline || !m_sink)
+            return QImage();
+
+        GstState state;
+        gst_element_get_state(m_pipeline.get(), &state, 0, 100 * GST_MSECOND);
+        if (state != GST_STATE_PLAYING)
+        {
+            gst_element_set_state(m_pipeline.get(), GST_STATE_PLAYING);
+        }
+
+        GstSample *sample = gst_app_sink_try_pull_sample(
+            GST_APP_SINK(m_sink.get()), GST_SECOND
+        );
+        if (!sample)
+        {
+            Debug(QS("Failed to pull sample from appsink"));
+            return QImage();
+        }
+
+        GstBuffer *buffer = gst_sample_get_buffer(sample);
+        GstMapInfo map;
+        if (!gst_buffer_map(buffer, &map, GST_MAP_READ))
+        {
+            gst_sample_unref(sample);
+            return QImage();
+        }
+
+        GstCaps *caps = gst_sample_get_caps(sample);
+        GstStructure *s = gst_caps_get_structure(caps, 0);
+        int width, height;
+        gst_structure_get_int(s, "width", &width);
+        gst_structure_get_int(s, "height", &height);
+
+        QImage frame(
+            (uchar*)map.data, width, height,
+            QImage::Format_RGB888
+        );
+        QImage copy = frame.copy();
+
+        gst_buffer_unmap(buffer, &map);
+        gst_sample_unref(sample);
+        return copy;
+    }
+
+    bool
+    startPreview() override
+    {
+        if (m_pipeline)
+        {
+            gst_element_set_state(m_pipeline.get(), GST_STATE_PLAYING);
+            return true;
+        }
+        return false;
+    }
+
+    void
+    stopPreview() override
+    {
+        if (m_pipeline)
+        {
+            gst_element_set_state(m_pipeline.get(), GST_STATE_PAUSED);
+        }
+    }
+
+private:
+
+    //Backend state,auto-cleaned up by deleters
+    std::unique_ptr<GstElement, GstPipelineDeleter> m_pipeline;
+    std::unique_ptr<GstElement, GstElementDeleter> m_sink;
+    bool m_gst_initialized;
+
 };
+
+std::unique_ptr<WebcamBackend>
+createWebcamBackend_GStreamer()
+{
+    return std::unique_ptr<WebcamBackend>(new GStreamerWebcamBackend());
+}
 
 QList<ScanDeviceInfo>
 enumerateDevices_GStreamer()
@@ -169,140 +312,6 @@ enumerateDevices_GStreamer()
     Debug(QS("Enumeration complete, found %d GStreamer webcam(s)", devices.size()));
     
     return devices;
-}
-
-bool
-initialize_GStreamer(WebcamSource *source, const QString &device_id)
-{
-    WebcamSource::PlatformData *data = source->m_platform_data.get();
-    
-    //Initialize GStreamer library if not already done
-    if (!data->gst_initialized)
-    {
-        GError *error = 0;
-        if (!gst_init_check(0, 0, &error))
-        {
-            Debug(QS("gst_init_check() FAILED: %s", error ? error->message : "unknown error"));
-            if (error)
-                g_error_free(error);
-            return false;
-        }
-        data->gst_initialized = true;
-        Debug(QS("GStreamer initialized successfully"));
-    }
-
-    //Build GStreamer pipeline: v4l2src captures from device, videoconvert ensures RGB format, appsink provides frames to app
-    QString pipeline_str = QString("v4l2src device=%1 ! videoconvert ! video/x-raw,format=RGB ! appsink name=sink").arg(device_id);
-
-    GError *error = 0;
-    GstElement *pipeline_raw = gst_parse_launch(pipeline_str.toUtf8().constData(), &error);
-    if (!pipeline_raw)
-    {
-        Debug(QS("FAILED to create GStreamer pipeline: %s", error ? error->message : "unknown error"));
-        if (error)
-            g_error_free(error);
-        return false;
-    }
-    data->pipeline.reset(pipeline_raw);
-
-    //Retrieve appsink element from pipeline for frame extraction
-    GstElement *sink_raw = gst_bin_get_by_name(GST_BIN(data->pipeline.get()), "sink");
-    if (!sink_raw)
-    {
-        Debug(QS("FAILED to get appsink element from pipeline"));
-        data->pipeline.reset();
-        return false;
-    }
-    data->sink.reset(sink_raw);
-
-    //Configure appsink to drop old frames and keep only latest
-    g_object_set(data->sink.get(), "max-buffers", 1, "drop", TRUE, NULL);
-
-    Debug(QS("Successfully created GStreamer pipeline for <%s>", CSTR(device_id)));
-    return true;
-}
-
-void
-cleanup_GStreamer(WebcamSource::PlatformData *data)
-{
-    //Smart pointers handle cleanup automatically
-    //Just reset them to trigger deleters
-    data->sink.reset();
-    data->pipeline.reset();
-}
-
-QImage
-captureFrame_GStreamer(WebcamSource::PlatformData *data)
-{
-    //GStreamer frame capture
-    if (!data->pipeline || !data->sink)
-        return QImage();
-
-    //Pipeline started in startPreview(), but check state for robustness
-    GstState state;
-    gst_element_get_state(data->pipeline.get(), &state, 0, 0);
-    if (state != GST_STATE_PLAYING)
-    {
-        gst_element_set_state(data->pipeline.get(), GST_STATE_PLAYING);
-    }
-
-    //Pull sample from appsink
-    GstSample *sample = gst_app_sink_try_pull_sample(
-        GST_APP_SINK(data->sink.get()), GST_SECOND
-    );
-    if (!sample)
-    {
-        Debug(QS("Failed to pull sample from appsink"));
-        return QImage();
-    }
-
-    GstBuffer *buffer = gst_sample_get_buffer(sample);
-    GstMapInfo map;
-    if (!gst_buffer_map(buffer, &map, GST_MAP_READ))
-    {
-        gst_sample_unref(sample);
-        return QImage();
-    }
-
-    //Get caps to determine format
-    GstCaps *caps = gst_sample_get_caps(sample);
-    GstStructure *s = gst_caps_get_structure(caps, 0);
-    int width, height;
-    gst_structure_get_int(s, "width", &width);
-    gst_structure_get_int(s, "height", &height);
-
-    QImage frame(
-        (uchar*)map.data, width, height,
-        QImage::Format_RGB888
-    );
-    QImage copy = frame.copy();
-
-    gst_buffer_unmap(buffer, &map);
-    gst_sample_unref(sample);
-
-    return copy;
-}
-
-bool
-startPreview_GStreamer(WebcamSource::PlatformData *data)
-{
-    //Start GStreamer pipeline for live streaming
-    if (data->pipeline)
-    {
-        gst_element_set_state(data->pipeline.get(), GST_STATE_PLAYING);
-        return true;
-    }
-    return false;
-}
-
-void
-stopPreview_GStreamer(WebcamSource::PlatformData *data)
-{
-    //Pause pipeline to stop consuming bandwidth while idle
-    if (data->pipeline)
-    {
-        gst_element_set_state(data->pipeline.get(), GST_STATE_PAUSED);
-    }
 }
 
 #endif //USE_GSTREAMER

@@ -28,8 +28,8 @@
 #include <QAction>
 #include <QSplitter>
 
-#include "scan/scansource.hpp"
-#include "scan/scanmanager.hpp"
+#include "scan/scan_source.hpp"
+#include "scan/scan_manager.hpp"
 #include "document/document.hpp"
 #include "document/documentexporter.hpp"
 #include "processing/image_processor.hpp"

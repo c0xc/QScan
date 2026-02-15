@@ -18,16 +18,13 @@
 **
 ****************************************************************************/
 
-#ifndef SCAN_SCANCAPABILITIES_HPP
-#define SCAN_SCANCAPABILITIES_HPP
+#ifndef SCAN_SCAN_CAPABILITIES_HPP
+#define SCAN_SCAN_CAPABILITIES_HPP
 
 #include <QList>
 #include <QString>
 #include <QSizeF>
 
-/**
- * Preview mode supported by the scan source.
- */
 enum class PreviewMode
 {
     None,           // No preview support
@@ -35,43 +32,33 @@ enum class PreviewMode
     LiveStream      // Preview is a continuous video stream (webcams)
 };
 
-/**
- * Describes the capabilities of a scan source.
- * Used by GUI to show/hide features dynamically.
- */
 struct ScanCapabilities
 {
-    bool supports_multi_page;          // Can scan multiple pages
-    bool supports_auto_feed;           // Has automatic document feeder (ADF)
-    bool supports_color_mode;          // Can scan in color
-    bool supports_auto_page_size;      // Can auto-detect page dimensions
-    bool supports_scan_settings;       // Whether scan parameter controls (resolution, page size, etc.) are meaningful
-    QList<int> supported_resolutions;  // Available DPI values
-    QStringList supported_color_modes; // "Color", "Gray", "BW"
-    QSizeF max_scan_area;              // Maximum scan area in mm
-    QSizeF default_scan_area;          // Default scan area in mm (typically A4)
-    PreviewMode preview_mode;          // Type of preview this source supports
+    bool supports_multi_page;
+    bool supports_auto_feed;
+    bool supports_color_mode;
+    bool supports_auto_page_size;
+    bool supports_scan_settings;
+    QList<int> supported_resolutions;
+    QStringList supported_color_modes;
+    QSizeF max_scan_area;
+    QSizeF default_scan_area;
+    PreviewMode preview_mode;
 
-    /**
-     * Constructor with sensible defaults
-     */
     ScanCapabilities()
         : supports_multi_page(false)
         , supports_auto_feed(false)
         , supports_color_mode(true)
         , supports_auto_page_size(false)
         , supports_scan_settings(true)
-        , max_scan_area(210.0, 297.0)      // A4
-        , default_scan_area(210.0, 297.0)  // A4
+        , max_scan_area(210.0, 297.0)
+        , default_scan_area(210.0, 297.0)
         , preview_mode(PreviewMode::SingleImage)
     {
         supported_resolutions << 75 << 150 << 300 << 600;
         supported_color_modes << "Color" << "Gray" << "BW";
     }
 
-    /**
-     * Helper to check if source provides live preview stream.
-     */
     bool
     hasLivePreview() const
     {
@@ -79,25 +66,22 @@ struct ScanCapabilities
     }
 };
 
-/**
- * Parameters for a scan operation.
- */
 struct ScanParameters
 {
-    int resolution;        // DPI
-    QString color_mode;    // "Color", "Gray", or "BW"
-    QSizeF scan_area;      // Scan area in mm (0,0 = auto-detect if supported)
-    bool use_adf;          // Use automatic document feeder
-    bool auto_page_size;   // Use automatic page size detection
+    int resolution;
+    QString color_mode;
+    QSizeF scan_area;
+    bool use_adf;
+    bool auto_page_size;
 
     ScanParameters()
         : resolution(300)
         , color_mode("Color")
-        , scan_area(210.0, 297.0) // A4
+        , scan_area(210.0, 297.0)
         , use_adf(false)
         , auto_page_size(false)
     {
     }
 };
 
-#endif // SCAN_SCANCAPABILITIES_HPP
+#endif // SCAN_SCAN_CAPABILITIES_HPP

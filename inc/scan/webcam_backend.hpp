@@ -18,23 +18,32 @@
 **
 ****************************************************************************/
 
-#ifndef CORE_MAIN_HPP
-#define CORE_MAIN_HPP
+#ifndef SCAN_WEBCAM_BACKEND_HPP
+#define SCAN_WEBCAM_BACKEND_HPP
 
-#include <QCoreApplication>
-#include <QApplication>
-#include <QTranslator>
-#include <QProcessEnvironment>
-#include <QFontDatabase>
-#include <QMessageBox>
+#include <QImage>
+#include <QString>
 
-#include "document/document.hpp"
-#include "gui/mainwindow.hpp"
-#include "scan/scan_manager.hpp"
-#include "gui/scannerselector.hpp"
+//Backend interface for webcam capture implementations
+class WebcamBackend
+{
+public:
 
-#include "core/classlogger.hpp"
+    virtual
+    ~WebcamBackend() = default;
 
-#define PROGRAM "QScan"
+    virtual bool
+    initialize(const QString &device_id) = 0;
 
-#endif // CORE_MAIN_HPP
+    virtual QImage
+    captureFrame() = 0;
+
+    virtual bool
+    startPreview() = 0;
+
+    virtual void
+    stopPreview() = 0;
+
+};
+
+#endif //SCAN_WEBCAM_BACKEND_HPP

@@ -29,7 +29,7 @@
 #include <QGroupBox>
 #include <QVBoxLayout>
 
-#include "scan/scancapabilities.hpp"
+#include "scan/scan_capabilities.hpp"
 
 /**
  * Control panel widget containing scan settings and image processing controls.

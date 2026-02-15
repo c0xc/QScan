@@ -18,23 +18,45 @@
 **
 ****************************************************************************/
 
-#ifndef CORE_MAIN_HPP
-#define CORE_MAIN_HPP
+#ifndef SCAN_SCAN_MANAGER_HPP
+#define SCAN_SCAN_MANAGER_HPP
 
-#include <QCoreApplication>
-#include <QApplication>
-#include <QTranslator>
-#include <QProcessEnvironment>
-#include <QFontDatabase>
-#include <QMessageBox>
+#include <QObject>
+#include <QList>
 
-#include "document/document.hpp"
-#include "gui/mainwindow.hpp"
-#include "scan/scan_manager.hpp"
-#include "gui/scannerselector.hpp"
+#include "scan/scan_device_info.hpp"
+#include "scan/scan_source.hpp"
 
-#include "core/classlogger.hpp"
+class ScanManager : public QObject
+{
+    Q_OBJECT
 
-#define PROGRAM "QScan"
+public:
 
-#endif // CORE_MAIN_HPP
+    explicit
+    ScanManager(QObject *parent = nullptr);
+
+    ~ScanManager() override;
+
+    bool
+    initialize();
+
+    QList<ScanDeviceInfo>
+    availableDevices() const;
+
+    ScanSource*
+    createScanSource(const QString &device_name, QObject *parent = nullptr);
+
+private:
+
+    QList<ScanDeviceInfo> m_devices;
+
+    void
+    enumerateScanners();
+
+    void
+    enumerateCameras();
+
+};
+
+#endif // SCAN_SCAN_MANAGER_HPP

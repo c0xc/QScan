@@ -1,3 +1,5 @@
+# QScan - A "Linux first" scanning application -- [c0xc], 2026
+
 cmake_minimum_required(VERSION 3.10)
 project(QScan VERSION 1.0.0 LANGUAGES CXX)
 
@@ -25,6 +27,27 @@ else()
     else()
         message(FATAL_ERROR "Neither Qt6 nor Qt5 found. Please install Qt development packages.")
     endif()
+endif()
+
+# Optional QtCamera backend (Qt Multimedia)
+set(QSCAN_HAVE_QTCAMERA OFF)
+if(Qt6_FOUND)
+    find_package(Qt6 COMPONENTS Multimedia QUIET)
+    if(TARGET Qt6::Multimedia)
+        set(QSCAN_HAVE_QTCAMERA ON)
+    endif()
+else()
+    find_package(Qt5 COMPONENTS Multimedia QUIET)
+    if(TARGET Qt5::Multimedia)
+        set(QSCAN_HAVE_QTCAMERA ON)
+    endif()
+endif()
+
+if(QSCAN_HAVE_QTCAMERA)
+    message(STATUS "QtCamera enabled: webcam capture via Qt Multimedia")
+    add_compile_definitions(USE_QTCAMERA=1)
+else()
+    message(STATUS "QtCamera disabled: Qt Multimedia not found")
 endif()
 
 # Find SANE
@@ -89,8 +112,10 @@ set(SOURCES
     
     # Scan backend
     src/scan_scan_manager.cpp
-    src/scan_sane_scan_device.cpp
+    src/scan_scanner_source.cpp
+    src/scan_scanner_backend_sane.cpp
     src/scan_webcam_source.cpp
+    src/scan_mobile_source.cpp
     
     # GUI
     src/gui_mainwindow.cpp
@@ -100,6 +125,15 @@ set(SOURCES
     src/gui_scan_control_panel.cpp
 )
 
+# Webcam backend implementations (selected by configuration)
+if(QSCAN_ENABLE_GSTREAMER)
+    list(APPEND SOURCES src/scan_webcam_source_gstreamer.cpp)
+endif()
+
+if(QSCAN_HAVE_QTCAMERA)
+    list(APPEND SOURCES src/scan_webcam_source_qtcamera.cpp)
+endif()
+
 # Add SmartCapture processor only if OpenCV is enabled
 if(QSCAN_ENABLE_OPENCV)
     list(APPEND SOURCES src/processing_smart_capture_processor.cpp)
@@ -108,10 +142,11 @@ endif()
 # Header files with Q_OBJECT that need MOC processing
 set(HEADERS_WITH_MOC
     inc/document/document.hpp
-    inc/scan/scansource.hpp
-    inc/scan/sanescandevice.hpp
-    inc/scan/webcamsource.hpp
-    inc/scan/scanmanager.hpp
+    inc/scan/scan_source.hpp
+    inc/scan/scanner_source.hpp
+    inc/scan/webcam_source.hpp
+    inc/scan/scan_manager.hpp
+    inc/scan/mobile_source.hpp
     inc/gui/mainwindow.hpp
     inc/gui/scanpreviewwidget.hpp
     inc/gui/pagelistwidget.hpp
@@ -128,6 +163,7 @@ if(Qt6_FOUND)
         Qt6::Core
         Qt6::Gui
         Qt6::Widgets
+        $<$<BOOL:${QSCAN_HAVE_QTCAMERA}>:Qt6::Multimedia>
         ${SANE_LIBRARIES}
     )
 else()
@@ -135,6 +171,7 @@ else()
         Qt5::Core
         Qt5::Gui
         Qt5::Widgets
+        $<$<BOOL:${QSCAN_HAVE_QTCAMERA}>:Qt5::Multimedia>
         ${SANE_LIBRARIES}
     )
 endif()

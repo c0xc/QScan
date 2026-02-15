@@ -18,26 +18,23 @@
 **
 ****************************************************************************/
 
-#include "scan/webcamsource.hpp"
+#include "scan/webcam_source.hpp"
+#include "scan/webcam_backend.hpp"
 #include "core/classlogger.hpp"
+
+#include <memory>
 
 //Forward declarations for platform-specific implementations
 #ifdef USE_GSTREAMER
 extern QList<ScanDeviceInfo> enumerateDevices_GStreamer();
-extern bool initialize_GStreamer(WebcamSource *source, const QString &device_id);
-extern void cleanup_GStreamer(WebcamSource::PlatformData *data);
-extern QImage captureFrame_GStreamer(WebcamSource::PlatformData *data);
-extern bool startPreview_GStreamer(WebcamSource::PlatformData *data);
-extern void stopPreview_GStreamer(WebcamSource::PlatformData *data);
+extern std::unique_ptr<WebcamBackend> createWebcamBackend_GStreamer();
+//Backend implementation is in scan_webcam_source_gstreamer.cpp
 #endif
 
 #ifdef USE_QTCAMERA
 extern QList<ScanDeviceInfo> enumerateDevices_QtCamera();
-extern bool initialize_QtCamera(WebcamSource *source, const QString &device_id);
-extern void cleanup_QtCamera(WebcamSource::PlatformData *data);
-extern QImage captureFrame_QtCamera(WebcamSource::PlatformData *data);
-extern bool startPreview_QtCamera(WebcamSource::PlatformData *data);
-extern void stopPreview_QtCamera(WebcamSource::PlatformData *data);
+extern std::unique_ptr<WebcamBackend> createWebcamBackend_QtCamera();
+//Backend implementation is in scan_webcam_source_qtcamera.cpp
 #endif
 
 WebcamSource::WebcamSource(const QString &device_identifier,
@@ -50,13 +47,19 @@ WebcamSource::WebcamSource(const QString &device_identifier,
               m_is_initialized(false),
               m_live_preview_active(false),
               m_preview_timer(0),
-              m_frame_fail_count(0),
-              m_platform_data(new PlatformData())
+              m_frame_fail_count(0)
 {
     m_capabilities.preview_mode = PreviewMode::LiveStream;
     m_capabilities.supports_multi_page = false;
     m_capabilities.supports_auto_feed = false;
     m_capabilities.supports_scan_settings = false;  //Webcams don't need scan parameter controls
+
+    //Prefer GStreamer if available, otherwise fall back to QtCamera
+#ifdef USE_GSTREAMER
+    m_backend = createWebcamBackend_GStreamer();
+#elif defined(USE_QTCAMERA)
+    m_backend = createWebcamBackend_QtCamera();
+#endif
 
     m_preview_timer = new QTimer(this);
     m_preview_timer->setInterval(33); //~30 fps
@@ -66,16 +69,8 @@ WebcamSource::WebcamSource(const QString &device_identifier,
 WebcamSource::~WebcamSource()
 {
     stopPreview();
-
-#ifdef USE_GSTREAMER
-    cleanup_GStreamer(m_platform_data.get());
-#endif
-
-#ifdef USE_QTCAMERA
-    cleanup_QtCamera(m_platform_data.get());
-#endif
-
-    //unique_ptr automatically deletes PlatformData
+    //Backend destructor handles cleanup
+    m_backend.reset();
 }
 
 QList<ScanDeviceInfo>
@@ -119,27 +114,20 @@ WebcamSource::initialize()
         return true;
     }
 
+    if (!m_backend)
+    {
+        Debug(QS("No webcam backend available for <%s>", CSTR(m_device_identifier)));
+        return false;
+    }
+
     Debug(QS("Initializing <%s>...", CSTR(m_device_identifier)));
 
-#ifdef USE_GSTREAMER
-    if (initialize_GStreamer(this, m_device_identifier))
-    {
-        queryCapabilities();
-        m_is_initialized = true;
-        return true;
-    }
-#endif
+    if (!m_backend->initialize(m_device_identifier))
+        return false;
 
-#ifdef USE_QTCAMERA
-    if (initialize_QtCamera(this, m_device_identifier))
-    {
-        queryCapabilities();
-        m_is_initialized = true;
-        return true;
-    }
-#endif
-
-    return false;
+    queryCapabilities();
+    m_is_initialized = true;
+    return true;
 }
 
 bool
@@ -192,15 +180,10 @@ WebcamSource::queryCapabilities()
 QImage
 WebcamSource::captureFrame()
 {
-#ifdef USE_GSTREAMER
-    return captureFrame_GStreamer(m_platform_data.get());
-#endif
+    if (!m_backend)
+        return QImage();
 
-#ifdef USE_QTCAMERA
-    return captureFrame_QtCamera(m_platform_data.get());
-#endif
-
-    return QImage();
+    return m_backend->captureFrame();
 }
 
 bool
@@ -212,21 +195,17 @@ WebcamSource::startPreview()
         return false;
     }
 
+    if (!m_backend)
+        return false;
+
     if (m_live_preview_active)
         return true;
 
     Debug(QS("Starting live preview stream"));
     m_frame_fail_count = 0;
 
-#ifdef USE_GSTREAMER
-    if (!startPreview_GStreamer(m_platform_data.get()))
+    if (!m_backend->startPreview())
         return false;
-#endif
-
-#ifdef USE_QTCAMERA
-    if (!startPreview_QtCamera(m_platform_data.get()))
-        return false;
-#endif
 
     m_live_preview_active = true;
     m_preview_timer->start();
@@ -243,13 +222,8 @@ WebcamSource::stopPreview()
     m_preview_timer->stop();
     m_live_preview_active = false;
 
-#ifdef USE_GSTREAMER
-    stopPreview_GStreamer(m_platform_data.get());
-#endif
-
-#ifdef USE_QTCAMERA
-    stopPreview_QtCamera(m_platform_data.get());
-#endif
+    if (m_backend)
+        m_backend->stopPreview();
 }
 
 bool
@@ -262,7 +236,7 @@ bool
 WebcamSource::isOpen() const
 {
     //Return true if device is properly initialized
-    return m_is_initialized;
+    return m_is_initialized && (m_backend != nullptr);
 }
 
 void

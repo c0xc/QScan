@@ -18,23 +18,44 @@
 **
 ****************************************************************************/
 
-#ifndef CORE_MAIN_HPP
-#define CORE_MAIN_HPP
+#ifndef SCAN_SCANNER_BACKEND_HPP
+#define SCAN_SCANNER_BACKEND_HPP
 
-#include <QCoreApplication>
-#include <QApplication>
-#include <QTranslator>
-#include <QProcessEnvironment>
-#include <QFontDatabase>
-#include <QMessageBox>
+#include <functional>
+#include <QImage>
+#include <QString>
+#include <QSizeF>
 
-#include "document/document.hpp"
-#include "gui/mainwindow.hpp"
-#include "scan/scan_manager.hpp"
-#include "gui/scannerselector.hpp"
+#include "scan/scan_capabilities.hpp"
 
-#include "core/classlogger.hpp"
+//Backend interface for local flatbed/ADF scanner implementations
+class ScannerBackend
+{
+public:
 
-#define PROGRAM "QScan"
+    using PageCallback = std::function<bool(const QImage &image, int page_number)>;
 
-#endif // CORE_MAIN_HPP
+    virtual
+    ~ScannerBackend() = default;
+
+    virtual bool
+    initialize(const QString &device_name) = 0;
+
+    virtual void
+    cancelScan() = 0;
+
+    virtual bool
+    isOpen() const = 0;
+
+    virtual ScanCapabilities
+    capabilities() const = 0;
+
+    virtual QSizeF
+    currentDocumentSize() const = 0;
+
+    virtual bool
+    scan(const ScanParameters &params, const PageCallback &on_page, QString &error_out) = 0;
+
+};
+
+#endif //SCAN_SCANNER_BACKEND_HPP
