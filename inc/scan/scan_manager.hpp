@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2025 Philip Seeger (p@c0xc.net)
+** Copyright (C) 2025 Philip Seeger (philip@c0xc.net)
 ** This file is part of QScan.
 **
 ** QScan is free software: you can redistribute it and/or modify
@@ -47,6 +47,14 @@ public:
     ScanSource*
     createScanSource(const QString &device_name, QObject *parent = nullptr);
 
+    //Backend-implemented endpoint probe for manual source add flows
+    //GUI should not perform protocol-specific network requests directly
+    bool
+    testEsclEndpoint(const QString &user_input,
+                     QString &normalized_url_out,
+                     QString &error_out,
+                     QString &suggested_label_out);
+
 private:
 
     QList<ScanDeviceInfo> m_devices;
@@ -59,4 +67,4 @@ private:
 
 };
 
-#endif // SCAN_SCAN_MANAGER_HPP
+#endif //SCAN_SCAN_MANAGER_HPP

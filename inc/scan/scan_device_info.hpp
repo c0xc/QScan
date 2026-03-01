@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2025 Philip Seeger (p@c0xc.net)
+** Copyright (C) 2025 Philip Seeger (philip@c0xc.net)
 ** This file is part of QScan.
 **
 ** QScan is free software: you can redistribute it and/or modify
@@ -37,14 +37,16 @@ struct ScanDeviceInfo
     QString name;
     QString description;
     ScanDeviceType type;
+    bool selectable;
 
     ScanDeviceInfo()
-        : type(ScanDeviceType::UNKNOWN)
+        : type(ScanDeviceType::UNKNOWN),
+          selectable(true)
     {
     }
 
-    ScanDeviceInfo(const QString &n, const QString &d, ScanDeviceType t)
-        : name(n), description(d), type(t)
+    ScanDeviceInfo(const QString &n, const QString &d, ScanDeviceType t, bool is_selectable = true)
+        : name(n), description(d), type(t), selectable(is_selectable)
     {
     }
 
@@ -60,4 +62,4 @@ struct ScanDeviceInfo
     }
 };
 
-#endif // SCAN_SCAN_DEVICE_INFO_HPP
+#endif //SCAN_SCAN_DEVICE_INFO_HPP

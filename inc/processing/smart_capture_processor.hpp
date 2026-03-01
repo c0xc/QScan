@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2025 Philip Seeger (p@c0xc.net)
+** Copyright (C) 2025 Philip Seeger (philip@c0xc.net)
 ** This file is part of QScan.
 **
 ** QScan is free software: you can redistribute it and/or modify
@@ -21,17 +21,18 @@
 #ifndef PROCESSING_SMART_CAPTURE_PROCESSOR_HPP
 #define PROCESSING_SMART_CAPTURE_PROCESSOR_HPP
 
-#include "processing/image_processor.hpp"
 #include <QObject>
 #include <QPolygonF>
+
+#include "processing/image_processor.hpp"
 
 /**
  * Represents a detected document region in a photo.
  * Contains 4 corners (possibly non-rectangular due to perspective).
  */
 struct DetectedRegion {
-    QPolygonF corners;      // 4 corners in clockwise order: top-left, top-right, bottom-right, bottom-left
-    double confidence;      // 0.0 - 1.0, how confident the detection is
+    QPolygonF corners;      //4 corners in clockwise order: top-left, top-right, bottom-right, bottom-left
+    double confidence;      //0.0 - 1.0, how confident the detection is
     
     DetectedRegion() : confidence(0.0) {}
     
@@ -63,7 +64,7 @@ public:
 
     SmartCaptureProcessor();
 
-    // --- Detection (called by GUI to get the rectangle) ---
+    //--- Detection (called by GUI to get the rectangle) ---
 
     /**
      * Detect document region in a photo/frame.
@@ -83,7 +84,7 @@ public:
     DetectedRegion
     detectDocument(const QImage &input);
 
-    // --- Extraction (called after user confirms the rectangle) ---
+    //--- Extraction (called after user confirms the rectangle) ---
 
     /**
      * Extract and perspective-correct the document from the detected region.
@@ -103,7 +104,7 @@ public:
     QImage
     extractDocument(const QImage &input, const DetectedRegion &region);
 
-    // --- Capability ---
+    //--- Capability ---
 
     /**
      * Check if SmartCapture is available.
@@ -112,7 +113,7 @@ public:
     bool
     isAvailable() const override;
 
-    // --- Base interface ---
+    //--- Base interface ---
 
     /**
      * Convenience method: detect + extract in one step (for batch/auto mode).
@@ -136,4 +137,4 @@ signals:
 
 };
 
-#endif // PROCESSING_SMART_CAPTURE_PROCESSOR_HPP
+#endif //PROCESSING_SMART_CAPTURE_PROCESSOR_HPP

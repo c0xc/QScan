@@ -22,8 +22,41 @@
 
 Document::Document(QObject *parent)
         : QObject(parent),
-          m_mode(IMAGE_MODE)
+          m_mode(IMAGE_MODE),
+          m_creator_program(QStringLiteral("QScan")),
+          m_creator_author(QStringLiteral("c0xc")),
+          m_created_time(QDateTime::currentDateTime())
 {
+}
+
+void
+Document::setCreatorProgram(const QString &name)
+{
+    m_creator_program = name;
+}
+
+QString
+Document::creatorProgram() const
+{
+    return m_creator_program;
+}
+
+void
+Document::setCreatorAuthor(const QString &author)
+{
+    m_creator_author = author;
+}
+
+QString
+Document::creatorAuthor() const
+{
+    return m_creator_author;
+}
+
+QDateTime
+Document::createdTime() const
+{
+    return m_created_time;
 }
 
 void

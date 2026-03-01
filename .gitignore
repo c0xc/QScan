@@ -3,6 +3,7 @@ VERSION
 
 /obj/
 /bin/
+/build-appimage/
 
 /platforms/
 
@@ -20,4 +21,6 @@ VERSION
 /build
 *.AppImage
 /AppDir/
+/AblageP/
+RESEARCH_NOTES/
 

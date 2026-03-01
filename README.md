@@ -1,13 +1,21 @@
 # QScan
 
-A Qt-based scanning application for Linux with support for SANE-compatible scanners and webcams.
+A Qt-based, "Linux first" scanning application with additional support for AirScan scanners and webcams.
 
-## Features
+## What is this?
 
-- **Image Scanning**: Single page scans with JPG/PNG output
-- **Document Scanning**: Multi-page scans with PDF output
-- **Auto-Processing**: Automatic crop and rotate detection
-- **Multiple Sources**: SANE scanners and V4L2 webcams
-- **ADF Support**: Automatic document feeder for batch scanning
+...
 
-# Stop editing, it gets worse! Looks like from a five-year old who copied an ad with hundreds of emojis.
+
+
+Author
+------
+
+Philip Seeger (philip@c0xc.net)
+
+
+
+License
+-------
+
+Please see the file called LICENSE.

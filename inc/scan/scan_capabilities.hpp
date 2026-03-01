@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2025 Philip Seeger (p@c0xc.net)
+** Copyright (C) 2025 Philip Seeger (philip@c0xc.net)
 ** This file is part of QScan.
 **
 ** QScan is free software: you can redistribute it and/or modify
@@ -27,20 +27,23 @@
 
 enum class PreviewMode
 {
-    None,           // No preview support
-    SingleImage,    // Preview is a single scan (traditional scanners)
-    LiveStream      // Preview is a continuous video stream (webcams)
+    None,           //no preview support
+    SingleImage,    //preview is a single scan (traditional scanners)
+    LiveStream      //preview is a continuous video stream (webcams)
 };
 
 struct ScanCapabilities
 {
     bool supports_multi_page;
     bool supports_auto_feed;
+    bool supports_duplex;
     bool supports_color_mode;
     bool supports_auto_page_size;
     bool supports_scan_settings;
     QList<int> supported_resolutions;
     QStringList supported_color_modes;
+    QStringList supported_input_sources;
+    QStringList supported_scan_sides;
     QSizeF max_scan_area;
     QSizeF default_scan_area;
     PreviewMode preview_mode;
@@ -48,13 +51,15 @@ struct ScanCapabilities
     ScanCapabilities()
         : supports_multi_page(false)
         , supports_auto_feed(false)
+        , supports_duplex(false)
         , supports_color_mode(true)
         , supports_auto_page_size(false)
         , supports_scan_settings(true)
-        , max_scan_area(210.0, 297.0)
-        , default_scan_area(210.0, 297.0)
+        , max_scan_area(210.0, 297.0) //A4 portrait in mm
+        , default_scan_area(210.0, 297.0) //A4 portrait in mm
         , preview_mode(PreviewMode::SingleImage)
     {
+        //Common scan DPI presets
         supported_resolutions << 75 << 150 << 300 << 600;
         supported_color_modes << "Color" << "Gray" << "BW";
     }
@@ -72,16 +77,18 @@ struct ScanParameters
     QString color_mode;
     QSizeF scan_area;
     bool use_adf;
+    bool use_duplex;
     bool auto_page_size;
 
     ScanParameters()
-        : resolution(300)
+        : resolution(300) //typical default for document scans
         , color_mode("Color")
-        , scan_area(210.0, 297.0)
+        , scan_area(210.0, 297.0) //A4 portrait in mm
         , use_adf(false)
+        , use_duplex(false)
         , auto_page_size(false)
     {
     }
 };
 
-#endif // SCAN_SCAN_CAPABILITIES_HPP
+#endif //SCAN_SCAN_CAPABILITIES_HPP

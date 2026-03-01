@@ -41,7 +41,7 @@
  * It works when storing the temporary QByteArray object in the QStr wrapper:
  * c_str() { m_qba = m_qstr.toUtf8(); return m_qba.constData();
  * ->
- * Debug(QS("TEST1 key <%s>...<%s>/<%s>... in main(%s)", CSTR(QString(key)), QStr(key).c_str(), CSTR2(key), CSTR2(this))); // main("0")
+ * Debug(QS("TEST1 key <%s>...<%s>/<%s>... in main(%s)", CSTR(QString(key)), QStr(key).c_str(), CSTR2(key), CSTR2(this))); //main("0")
  * qInfo() << " in main"<< QString::asprintf("qTEST2(%s)", QStr(this).c_str());
  * ->
  * TEST1 key <902680f4a21842d2c18a4b4a69f4eb9d>...<902680f4a21842d2c18a4b4a69f4eb9d>/<902680f4a21842d2c18a4b4a69f4eb9d>... in main(0x11cd830)
@@ -67,7 +67,7 @@
  * See commentary above, use QStr wrapper class or stream op.
  */
 
-// === === ===
+//=== === ===
 
 void
 ClassLogger::logMsg(const QString &msg, int level, const char *file, int line, const char *func)
@@ -100,7 +100,7 @@ ClassLogger::log(const QString &msg, int level, const char *file, int line, cons
 
     //Filter (only accept log messages from specific areas)
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    // Qt6: QRegularExpression
+    //Qt6: QRegularExpression
     if (!m_rx_class.pattern().isEmpty())
     {
         if (!m_rx_class.match(class_name).hasMatch())
@@ -112,7 +112,7 @@ ClassLogger::log(const QString &msg, int level, const char *file, int line, cons
             return;
     }
 #else
-    // Qt5: QRegExp
+    //Qt5: QRegExp
     if (!m_rx_class.isEmpty())
     {
         if (!m_rx_class.exactMatch(class_name))
@@ -137,11 +137,13 @@ ClassLogger::log(const QString &msg, int level, const char *file, int line, cons
         final_entry += '\n';
 
     //Write log entry
-    //if (m_dst_file.isOpen())
-    //{
-    //    m_dst_file.write(final_entry.toUtf8());
-    //    m_dst_file.flush();
-    //}
+    /*
+    if (m_dst_file.isOpen())
+    {
+        m_dst_file.write(final_entry.toUtf8());
+        m_dst_file.flush();
+    }
+    */
     *m_txt_stream_ptr << final_entry.toUtf8();
     m_txt_stream_ptr->flush();
 
@@ -187,7 +189,7 @@ ClassLogger::instance()
 
 ClassLogger::ClassLogger()
            : m_txt_stream_out(stdout), 
-             m_txt_stream_ptr(&m_txt_stream_default)
+             m_txt_stream_ptr(&m_txt_stream_default) //TODO m_txt_stream_out
 {
 }
 

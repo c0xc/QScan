@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2025 Philip Seeger (p@c0xc.net)
+** Copyright (C) 2025 Philip Seeger (philip@c0xc.net)
 ** This file is part of QScan.
 **
 ** QScan is free software: you can redistribute it and/or modify
@@ -21,8 +21,9 @@
 #ifndef PROCESSING_ROTATE_PROCESSOR_HPP
 #define PROCESSING_ROTATE_PROCESSOR_HPP
 
-#include "processing/image_processor.hpp"
 #include <QColor>
+
+#include "processing/image_processor.hpp"
 
 /**
  * Rotate processor - rotates images by specified angles.
@@ -67,4 +68,4 @@ public:
 
 };
 
-#endif // PROCESSING_ROTATE_PROCESSOR_HPP
+#endif //PROCESSING_ROTATE_PROCESSOR_HPP

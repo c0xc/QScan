@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2025 Philip Seeger (p@c0xc.net)
+** Copyright (C) 2025 Philip Seeger (philip@c0xc.net)
 ** This file is part of QScan.
 **
 ** QScan is free software: you can redistribute it and/or modify
@@ -41,7 +41,8 @@ public:
     {
         JPG,
         PNG,
-        PDF
+        PDF,
+        TIFF
     };
 
     DocumentExporter();
@@ -81,6 +82,12 @@ private:
     exportToPDF(const Document &doc, const QString &path);
 
     /**
+     * Export document to multi-page TIFF using libtiff (if available).
+     */
+    bool
+    exportToTIFF(const Document &doc, const QString &path);
+
+    /**
      * Export image with metadata.
      */
     bool
@@ -92,4 +99,4 @@ private:
 
 };
 
-#endif // DOCUMENT_DOCUMENTEXPORTER_HPP
+#endif //DOCUMENT_DOCUMENTEXPORTER_HPP

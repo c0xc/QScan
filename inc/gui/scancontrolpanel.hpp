@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2025 Philip Seeger (p@c0xc.net)
+** Copyright (C) 2025 Philip Seeger (philip@c0xc.net)
 ** This file is part of QScan.
 **
 ** QScan is free software: you can redistribute it and/or modify
@@ -25,6 +25,8 @@
 #include <QComboBox>
 #include <QCheckBox>
 #include <QPushButton>
+#include <QButtonGroup>
+#include <QToolButton>
 #include <QLabel>
 #include <QGroupBox>
 #include <QVBoxLayout>
@@ -41,57 +43,49 @@ class ScanControlPanel : public QWidget
 
 public:
 
-    explicit
-    ScanControlPanel(QWidget *parent = nullptr);
+    enum CropMode
+    {
+        CropOff = 0,
+        CropAuto = 1,
+        CropManual = 2
+    };
 
-    /**
-     * Update controls based on scanner capabilities.
-     * Called when a scanner is initialized.
-     */
+    explicit
+    ScanControlPanel(QWidget *parent = 0);
+
     void
     setCapabilities(const ScanCapabilities &caps);
 
-    /**
-     * Get current scan parameters from UI controls.
-     */
     ScanParameters
     getScanParameters() const;
 
-    /**
-     * Enable/disable scan controls (e.g., during scanning).
-     */
     void
     setScanControlsEnabled(bool enabled);
 
+    void
+    setCropMode(CropMode mode);
+
+    CropMode
+    cropMode() const;
+
+    void
+    setAutoCropWarning(const QString &tooltip, bool enabled);
+
+
 signals:
 
-    /**
-     * Emitted when user clicks rotate left button.
-     */
     void
     rotateLeftRequested();
 
-    /**
-     * Emitted when user clicks rotate right button.
-     */
     void
     rotateRightRequested();
 
-    /**
-     * Emitted when user clicks manual crop button.
-     */
     void
-    manualCropRequested();
+    cropModeChanged(int mode);
 
-    /**
-     * Emitted when auto-crop checkbox state changes.
-     */
     void
-    autoCropChanged(bool enabled);
+    nextCropRequested();
 
-    /**
-     * Emitted when ADF checkbox state changes.
-     */
     void
     adfModeChanged(bool enabled);
 
@@ -103,28 +97,35 @@ private slots:
     void
     onPageSizeChanged(int index);
 
+    void
+    onAdfToggled(bool enabled);
+
 private:
 
-    // Scan Settings
+    //Scan Settings
     QGroupBox *m_scan_settings_group;
     QComboBox *m_resolution_combo;
     QCheckBox *m_adf_checkbox;
+    QCheckBox *m_duplex_checkbox;
     QComboBox *m_color_mode_combo;
     QPushButton *m_advanced_button;
-    
-    // Advanced scan settings (hidden by default)
+
+    //Advanced scan settings
     QWidget *m_advanced_widget;
     QComboBox *m_page_size_combo;
     bool m_advanced_visible;
 
-    // Image Processing
+    //Image Processing
     QGroupBox *m_image_processing_group;
-    QCheckBox *m_autocrop_checkbox;
+    QToolButton *m_crop_off_button;
+    QToolButton *m_crop_auto_button;
+    QToolButton *m_crop_manual_button;
+    QButtonGroup *m_crop_mode_group;
+    bool m_crop_auto_reclick_pending;
     QPushButton *m_rotate_left_button;
     QPushButton *m_rotate_right_button;
-    QPushButton *m_manual_crop_button;
 
-    // Current capabilities
+    //Current capabilities
     ScanCapabilities m_capabilities;
 
     void
@@ -138,7 +139,6 @@ private:
 
     void
     populatePageSizes();
-
 };
 
-#endif // GUI_SCANCONTROLPANEL_HPP
+#endif //GUI_SCANCONTROLPANEL_HPP

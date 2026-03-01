@@ -20,15 +20,47 @@
 
 #include "main.hpp"
 
+#include <QGuiApplication>
+#include <QIcon>
+#include <QStyle>
+
 int
 main(int argc, char *argv[])
 {
-    // Initialize Qt Application
+    //Initialize Qt Application
     QApplication app(argc, argv);
-    app.setApplicationName(PROGRAM);
-    app.setOrganizationName("QScan");
+    app.setApplicationName(PROGRAM); //QScan
+    app.setOrganizationName("c0xc");
 
-    // Initialize scan manager
+    //Set a deterministic app/window icon
+    //Many desktop environments use this for taskbar/dock icons
+    {
+        QGuiApplication::setDesktopFileName(QStringLiteral("qscan"));
+
+        QIcon icon(QStringLiteral(":/icons/QScan_17719790191e44_1.png"));
+        if (icon.isNull())
+            icon = QIcon(QStringLiteral(":/icons/icons/scanner.svg"));
+        if (icon.isNull())
+            icon = app.style()->standardIcon(QStyle::SP_DesktopIcon);
+        app.setWindowIcon(icon);
+    }
+
+    Debug(QS("Qt compile version: %s", QT_VERSION_STR));
+    Debug(QS("Qt runtime version: %s", qVersion()));
+
+#if defined(USE_GSTREAMER)
+    Debug(QS("Webcam backend compiled in: GStreamer"));
+#endif
+#if defined(USE_QTCAMERA)
+    Debug(QS("Webcam backend compiled in: QtCamera"));
+#endif
+#if !defined(USE_GSTREAMER) && !defined(USE_QTCAMERA)
+    Debug(QS("Webcam backend compiled in: none"));
+#endif
+
+    qRegisterMetaType<qscan::ScanPageInfo>("qscan::ScanPageInfo");
+
+    //Initialize scan manager
     ScanManager scan_manager;
     if (!scan_manager.initialize())
     {
@@ -37,23 +69,17 @@ main(int argc, char *argv[])
         return 1;
     }
 
-    // Check if any devices are available
     if (scan_manager.availableDevices().isEmpty())
-    {
-        QMessageBox::warning(0, QObject::tr("No Devices"),
-                           QObject::tr("No scanner or webcam devices found.\n\n"
-                                      "Please connect a scanner or webcam and try again."));
-        return 1;
-    }
+        Debug(QS("No devices enumerated at startup; showing selector for manual add"));
 
-    // Show scanner selection dialog
+    //Show scanner selection dialog
     ScannerSelector selector(&scan_manager);
     if (selector.exec() != QDialog::Accepted)
     {
-        return 0;  // User cancelled
+        return 0;  //User cancelled
     }
 
-    // Create scan source
+    //Create scan source
     QString device_name = selector.selectedDeviceName();
     Debug(QS("Selected device: <%s>", CSTR(device_name)));
 
@@ -67,87 +93,43 @@ main(int argc, char *argv[])
     }
 
     Debug(QS("Calling initialize() on scan source for device <%s>", CSTR(device_name)));
-    if (!scan_source->initialize())
+    while (!scan_source->initialize())
     {
         Debug(QS("FAILED to initialize scan source for device <%s>", CSTR(device_name)));
-        QMessageBox::critical(0, QObject::tr("Device Error"),
-                            QObject::tr("Failed to initialize device."));
-        delete scan_source;
-        return 1;
+
+        QString text = QObject::tr("Failed to initialize device.");
+        if (device_name.startsWith("hpaio:"))
+        {
+            text += "\n\n" + QObject::tr(
+                "Tip of the day: This looks like an HP (hpaio) device. "
+                "If HP's plugin/driver installer is blocking scans, resolve that first and then retry (HP Device Manager). "
+                "If HP's plugin software gives you a bad day, consider adding the scanner as eSCL as a workaround (Add Source...).");
+        }
+
+        QMessageBox box(QMessageBox::Critical, QObject::tr("Device Error"), text, QMessageBox::NoButton, &selector);
+        QPushButton *retry = box.addButton(QObject::tr("Retry"), QMessageBox::AcceptRole);
+        box.addButton(QMessageBox::Cancel);
+        box.exec();
+
+        if (box.clickedButton() != retry)
+        {
+            delete scan_source;
+            return 1;
+        }
     }
     Debug(QS("Scan source initialized successfully for device <%s>", CSTR(device_name)));
 
-    // Create and show main window
+    //Create and show main window
     MainWindow *main_window = new MainWindow(scan_source);
     main_window->show();
 
-    // Run event loop
+    //Run event loop
     int code = app.exec();
     
-    // Cleanup
+    //Cleanup
     delete main_window;
     delete scan_source;
     
     return code;
-
-    // TODO: Implement full SANE scanning and webcam capture
-    /*
-    // Initialize scan manager
-    ScanManager scan_manager;
-    if (!scan_manager.initialize())
-    {
-        QMessageBox::critical(0, QObject::tr("Initialization Error"),
-                            QObject::tr("Failed to initialize SANE. Please ensure SANE is properly installed."));
-        return 1;
-    }
-
-    // Check if any devices are available
-    if (scan_manager.availableDevices().isEmpty())
-    {
-        QMessageBox::warning(0, QObject::tr("No Devices"),
-                           QObject::tr("No scanner devices found. Please connect a scanner and try again."));
-        return 1;
-    }
-
-    // Show scanner selection dialog
-    ScannerSelector selector(&scan_manager);
-    if (selector.exec() != QDialog::Accepted)
-    {
-        return 0;  // User cancelled
-    }
-
-    // Create scan source
-    QString device_name = selector.selectedDeviceName();
-    Document::ScanMode scan_mode = selector.selectedMode();
-    
-    ScanSource *scan_source = scan_manager.createScanSource(device_name);
-    if (!scan_source)
-    {
-        QMessageBox::critical(0, QObject::tr("Device Error"),
-                            QObject::tr("Failed to open scanner device: %1").arg(device_name));
-        return 1;
-    }
-
-    if (!scan_source->initialize())
-    {
-        QMessageBox::critical(0, QObject::tr("Device Error"),
-                            QObject::tr("Failed to initialize scanner device."));
-        delete scan_source;
-        return 1;
-    }
-
-    // Create and show main window
-    MainWindow *main_window = new MainWindow(scan_source, scan_mode);
-    main_window->show();
-
-    // Run event loop
-    int code = app.exec();
-    
-    // Cleanup
-    delete main_window;
-    delete scan_source;
-    
-    return code;
-    */
 }
 

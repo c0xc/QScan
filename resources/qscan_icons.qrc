@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/icons">
+        <file>icons/scanner.svg</file>
+        <file>icons/webcam.svg</file>
+        <file alias="QScan_17719790191e44_1.png">icons/QScan_17719790191e44_1.png</file>
+    </qresource>
+</RCC>

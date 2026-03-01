@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2025 Philip Seeger (p@c0xc.net)
+** Copyright (C) 2025 Philip Seeger (philip@c0xc.net)
 ** This file is part of QScan.
 **
 ** QScan is free software: you can redistribute it and/or modify
@@ -27,13 +27,14 @@
 #include <QSizeF>
 
 #include "scan/scan_capabilities.hpp"
+#include "scan/scan_page_info.hpp"
 
 //Backend interface for local flatbed/ADF scanner implementations
 class ScannerBackend
 {
 public:
 
-    using PageCallback = std::function<bool(const QImage &image, int page_number)>;
+    using PageCallback = std::function<bool(const QImage &image, int page_number, const qscan::ScanPageInfo &page_info)>;
 
     virtual
     ~ScannerBackend() = default;
@@ -52,6 +53,12 @@ public:
 
     virtual QSizeF
     currentDocumentSize() const = 0;
+
+    //If true, the returned currentDocumentSize() comes from the device/backend as a physical paper size
+    //(e.g. an ADF scanner that detects the paper dimensions). If false but currentDocumentSize() is non-empty,
+    //it should be treated as an estimate derived from pixels and DPI
+    virtual bool
+    documentSizeIsReported() const { return false; }
 
     virtual bool
     scan(const ScanParameters &params, const PageCallback &on_page, QString &error_out) = 0;

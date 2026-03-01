@@ -1,8 +1,8 @@
 # QScan
 # qmake config - for Qt5 compatibility
-# possibly reduced feature set (as opposed to our cmake config)
+# reduced feature set (as opposed to our cmake config)
 
-QT += core gui widgets
+QT += core gui widgets svg
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -22,11 +22,13 @@ unix {
     PKGCONFIG += sane-backends
 }
 
-# OpenCV library (optional - comment out to disable SmartCapture)
+# OpenCV library (optional)
 # unix {
 #     CONFIG += link_pkgconfig
 #     PKGCONFIG += opencv4
 #     DEFINES += HAVE_OPENCV=1
+#     SOURCES += src/processing_smart_capture_processor.cpp
+#     HEADERS += inc/processing/smart_capture_processor.hpp
 # }
 
 # Source files
@@ -39,12 +41,12 @@ SOURCES += \
     src/processing_crop_processor.cpp \
     src/processing_rotate_processor.cpp \
     src/processing_border_detector.cpp \
-    src/processing_smart_capture_processor.cpp \
     src/scan_scanner_source.cpp \
     src/scan_scanner_backend_sane.cpp \
     src/scan_webcam_source.cpp \
     src/scan_mobile_source.cpp \
     src/scan_scan_manager.cpp \
+    src/scan_escl_compatibility_detector.cpp \
     src/document_scanned_page.cpp \
     src/document_document.cpp \
     src/document_document_exporter.cpp \
@@ -68,6 +70,7 @@ HEADERS += \
     inc/scan/webcam_backend.hpp \
     inc/scan/webcam_source.hpp \
     inc/scan/scan_manager.hpp \
+    inc/scan/escl_compatibility_detector.hpp \
     inc/scan/mobile_source.hpp \
     inc/document/scannedpage.hpp \
     inc/document/document.hpp \
@@ -76,12 +79,14 @@ HEADERS += \
     inc/processing/crop_processor.hpp \
     inc/processing/rotate_processor.hpp \
     inc/processing/border_detector.hpp \
-    inc/processing/smart_capture_processor.hpp \
     inc/gui/scannerselector.hpp \
     inc/gui/mainwindow.hpp \
     inc/gui/scanpreviewwidget.hpp \
     inc/gui/pagelistwidget.hpp \
     inc/gui/scancontrolpanel.hpp
+
+RESOURCES += resources/qscan_icons.qrc
+
 
 # Installation
 target.path = /usr/local/bin

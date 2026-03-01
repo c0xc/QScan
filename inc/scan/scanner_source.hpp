@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2025 Philip Seeger (p@c0xc.net)
+** Copyright (C) 2025 Philip Seeger (philip@c0xc.net)
 ** This file is part of QScan.
 **
 ** QScan is free software: you can redistribute it and/or modify
@@ -23,6 +23,8 @@
 
 #include <memory>
 #include <QThread>
+#include <QPointer>
+#include <atomic>
 
 #include "scan/scan_source.hpp"
 #include "scan/scan_device_info.hpp"
@@ -41,12 +43,22 @@ public:
 
     ScannerSource(const QString &device_name,
                  const QString &device_desc,
-                 QObject *parent = nullptr);
+                 QObject *parent = 0);
 
     ~ScannerSource() override;
 
     ScanCapabilities
     capabilities() const override;
+
+    //Scanner-only queries (webcam not affected)
+    QStringList
+    supportedInputSources() const;
+
+    bool
+    supportsDuplex() const;
+
+    QStringList
+    supportedScanSides() const;
 
     QString
     deviceName() const override;
@@ -81,11 +93,8 @@ public:
     QSizeF
     currentDocumentSize() const override;
 
-    bool
-    documentSizeIsReported() const override;
-
-    bool
-    documentSizeWasAutoDetected() const override;
+    ReportedDocumentSize
+    reportedDocumentSize() const override;
 
 private:
 
@@ -97,10 +106,15 @@ private:
     bool m_last_auto_page_size;
 
     bool m_preview_active;
-    QThread *m_preview_thread;
+    QPointer<QThread> m_preview_thread;
+
+    std::shared_ptr<std::atomic<bool>> m_preview_cancel_requested;
+
+    std::shared_ptr<std::atomic<bool>> m_scan_cancel_requested;
+    QPointer<QThread> m_scan_thread;
 
     //Backend instance (owns backend-private state)
-    std::unique_ptr<ScannerBackend> m_backend;
+    std::shared_ptr<ScannerBackend> m_backend;
 
 };
 

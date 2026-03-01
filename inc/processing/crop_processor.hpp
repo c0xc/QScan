@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2025 Philip Seeger (p@c0xc.net)
+** Copyright (C) 2025 Philip Seeger (philip@c0xc.net)
 ** This file is part of QScan.
 **
 ** QScan is free software: you can redistribute it and/or modify
@@ -21,9 +21,10 @@
 #ifndef PROCESSING_CROP_PROCESSOR_HPP
 #define PROCESSING_CROP_PROCESSOR_HPP
 
-#include "processing/image_processor.hpp"
 #include <QRect>
 #include <QPolygonF>
+
+#include "processing/image_processor.hpp"
 
 /**
  * Crop processor - crops images to specified regions.
@@ -47,15 +48,11 @@ public:
 
     /**
      * Crop image to a polygon (4 corners, for perspective-corrected crops).
-     * Without OpenCV: performs simple bounding-box crop.
-     * With OpenCV: delegates to SmartCaptureProcessor for perspective warp.
+     * TODO not implemented here (WarpDetection module)
      */
     QImage
-    cropToQuad(const QImage &input, const QPolygonF &quad);
+    crop(const QImage &input, const QPolygonF &quad);
 
-    /**
-     * Convenience method: crops to entire image bounds (no-op).
-     */
     QImage
     process(const QImage &input) override;
 
@@ -67,4 +64,4 @@ public:
 
 };
 
-#endif // PROCESSING_CROP_PROCESSOR_HPP
+#endif //PROCESSING_CROP_PROCESSOR_HPP

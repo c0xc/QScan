@@ -5,7 +5,7 @@ QString ProfileSettings::_global_id;
 //QString
 //ProfileSettings::selectedProfile()
 //{
-//    return "";
+//return "";
 //}
 
 ProfileSettings*
@@ -65,7 +65,7 @@ ProfileSettings::ProfileSettings(const ProfileSettings &other)
                  _id(0)
 {
     //if (!m_state["default_group_exception"].isValid())
-    //    m_state["default_group_exception"] = QStringList() << "profiles";
+    //m_state["default_group_exception"] = QStringList() << "profiles";
     if (!m_state["default_group_exception"].isValid())
         m_state = other.m_state;
 }

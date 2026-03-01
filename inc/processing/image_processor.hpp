@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2025 Philip Seeger (p@c0xc.net)
+** Copyright (C) 2025 Philip Seeger (philip@c0xc.net)
 ** This file is part of QScan.
 **
 ** QScan is free software: you can redistribute it and/or modify
@@ -39,11 +39,11 @@ public:
      * Some capabilities require optional dependencies (e.g., OpenCV).
      */
     enum Capability {
-        Crop            = 0x01,   // Always available (CropProcessor)
-        Rotate          = 0x02,   // Always available (RotateProcessor)
-        Enhance         = 0x04,   // Always available (EnhanceProcessor)
-        BorderDetect    = 0x08,   // Always available (BorderDetector, Qt-only)
-        SmartCapture    = 0x10,   // Optional (SmartCaptureProcessor, needs OpenCV)
+        Crop            = 0x01,   //always available (CropProcessor)
+        Rotate          = 0x02,   //always available (RotateProcessor)
+        Enhance         = 0x04,   //always available (EnhanceProcessor)
+        BorderDetect    = 0x08,   //always available (BorderDetector, Qt-only)
+        SmartCapture    = 0x10,   //optional (SmartCaptureProcessor, needs OpenCV)
     };
     Q_DECLARE_FLAGS(Capabilities, Capability)
 
@@ -80,4 +80,4 @@ public:
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(ImageProcessor::Capabilities)
 
-#endif // PROCESSING_IMAGE_PROCESSOR_HPP
+#endif //PROCESSING_IMAGE_PROCESSOR_HPP

@@ -18,17 +18,20 @@
 **
 ****************************************************************************/
 
-//GStreamer implementation for webcam capture
+//GStreamer webcam capture backend
 #ifdef USE_GSTREAMER
+
+#include <gst/gst.h>
+#include <gst/app/gstappsink.h>
+#include <gst/video/video.h>
+#include <memory>
+
+#include <QDir>
+#include <QFile>
 
 #include "scan/webcam_backend.hpp"
 #include "scan/scan_device_info.hpp"
 #include "core/classlogger.hpp"
-#include <gst/gst.h>
-#include <gst/app/gstappsink.h>
-#include <QDir>
-#include <QFile>
-#include <memory>
 
 //Custom deleters for GStreamer objects
 struct GstPipelineDeleter
@@ -56,6 +59,76 @@ struct GstElementDeleter
     }
 };
 
+static void
+drainGStreamerBusForDebug(GstElement *pipeline)
+{
+    if (!pipeline)
+        return;
+
+    //Acquire bus
+    //Some failures only surface on the bus, not via return values
+    GstBus *bus = gst_element_get_bus(pipeline);
+    if (!bus)
+        return;
+
+    //Drain error and warning messages
+    for (;;)
+    {
+        GstMessage *msg = gst_bus_pop_filtered(bus, static_cast<GstMessageType>(GST_MESSAGE_ERROR | GST_MESSAGE_WARNING));
+        if (!msg)
+            break;
+
+        if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_ERROR)
+        {
+            //Log error payload
+            GError *err = 0;
+            gchar *dbg = 0;
+            gst_message_parse_error(msg, &err, &dbg);
+            Debug(QS("GStreamer bus ERROR: %s", err ? err->message : "unknown"));
+            if (dbg)
+                Debug(QS("GStreamer bus ERROR debug: %s", dbg));
+            if (err)
+                g_error_free(err);
+            if (dbg)
+                g_free(dbg);
+        }
+        else if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_WARNING)
+        {
+            //Log warning payload
+            GError *err = 0;
+            gchar *dbg = 0;
+            gst_message_parse_warning(msg, &err, &dbg);
+            Debug(QS("GStreamer bus WARNING: %s", err ? err->message : "unknown"));
+            if (dbg)
+                Debug(QS("GStreamer bus WARNING debug: %s", dbg));
+            if (err)
+                g_error_free(err);
+            if (dbg)
+                g_free(dbg);
+        }
+
+        gst_message_unref(msg);
+    }
+
+    //Cleanup
+    gst_object_unref(bus);
+}
+
+static GstCaps *
+createPreferredAppsinkCaps()
+{
+    //Preferred appsink raw formats
+    //Keep the list small and QImage-friendly, let negotiation pick the first available
+    return gst_caps_from_string(
+        "video/x-raw,format=(string)BGRx;"
+        "video/x-raw,format=(string)BGRA;"
+        "video/x-raw,format=(string)RGBA;"
+        "video/x-raw,format=(string)RGBx;"
+        "video/x-raw,format=(string)RGB;"
+        "video/x-raw,format=(string)BGR"
+    );
+}
+
 class GStreamerWebcamBackend : public WebcamBackend
 {
 public:
@@ -78,6 +151,7 @@ public:
     initialize(const QString &device_id) override
     {
         //Init GStreamer once
+        //Avoid repeated init across preview sessions
         if (!m_gst_initialized)
         {
             GError *error = 0;
@@ -92,9 +166,11 @@ public:
             Debug(QS("GStreamer initialized successfully"));
         }
 
-        //Build pipeline: v4l2src->videoconvert->RGB->appsink
-        QString pipeline_str = QString("v4l2src device=%1 ! videoconvert ! video/x-raw,format=RGB ! appsink name=sink").arg(device_id);
+        //Build v4l2src -> videoconvert -> appsink
+        //Prefer appsink caps negotiation over hard-forcing a format in the pipeline string
+        QString pipeline_str = QString("v4l2src device=%1 ! videoconvert ! appsink name=sink").arg(device_id);
 
+        //Create pipeline
         GError *error = 0;
         GstElement *pipeline_raw = gst_parse_launch(pipeline_str.toUtf8().constData(), &error);
         if (!pipeline_raw)
@@ -112,6 +188,7 @@ public:
         }
         m_pipeline.reset(pipeline_raw);
 
+        //Get appsink element
         GstElement *sink_raw = gst_bin_get_by_name(GST_BIN(m_pipeline.get()), "sink");
         if (!sink_raw)
         {
@@ -121,8 +198,39 @@ public:
         }
         m_sink.reset(sink_raw);
 
-        //Drop old frames, keep latest
-        g_object_set(m_sink.get(), "max-buffers", 1, "drop", TRUE, NULL);
+        //Request QImage-friendly raw formats
+        GstCaps *preferred_caps = createPreferredAppsinkCaps();
+        if (preferred_caps)
+        {
+            gst_app_sink_set_caps(GST_APP_SINK(m_sink.get()), preferred_caps);
+            gst_caps_unref(preferred_caps);
+        }
+
+        //Appsink buffering policy
+        //Drop old frames to avoid unbounded buffering when UI renders slower than capture
+        g_object_set(m_sink.get(), "max-buffers", 1, "drop", TRUE, "sync", FALSE, NULL);
+
+        //Preroll validation
+        //Avoid returning success for a pipeline that will never produce samples
+        GstStateChangeReturn ret = gst_element_set_state(m_pipeline.get(), GST_STATE_PAUSED);
+        if (ret == GST_STATE_CHANGE_FAILURE)
+        {
+            Debug(QS("GStreamer pipeline failed to enter PAUSED state"));
+            drainGStreamerBusForDebug(m_pipeline.get());
+            m_sink.reset();
+            m_pipeline.reset();
+            return false;
+        }
+        GstState state = GST_STATE_NULL;
+        ret = gst_element_get_state(m_pipeline.get(), &state, 0, 2 * GST_SECOND);
+        if (ret == GST_STATE_CHANGE_FAILURE || (state != GST_STATE_PAUSED && state != GST_STATE_PLAYING))
+        {
+            Debug(QS("GStreamer pipeline did not preroll (state=%d)", static_cast<int>(state)));
+            drainGStreamerBusForDebug(m_pipeline.get());
+            m_sink.reset();
+            m_pipeline.reset();
+            return false;
+        }
 
         Debug(QS("Successfully created GStreamer pipeline for <%s>", CSTR(device_id)));
         return true;
@@ -135,12 +243,15 @@ public:
             return QImage();
 
         GstState state;
+        //Short state wait for UI responsiveness
         gst_element_get_state(m_pipeline.get(), &state, 0, 100 * GST_MSECOND);
         if (state != GST_STATE_PLAYING)
         {
             gst_element_set_state(m_pipeline.get(), GST_STATE_PLAYING);
         }
 
+        //Pull a single frame with timeout
+        //Avoid hanging the preview loop when the camera stops producing samples
         GstSample *sample = gst_app_sink_try_pull_sample(
             GST_APP_SINK(m_sink.get()), GST_SECOND
         );
@@ -150,6 +261,7 @@ public:
             return QImage();
         }
 
+        //Map sample buffer
         GstBuffer *buffer = gst_sample_get_buffer(sample);
         GstMapInfo map;
         if (!gst_buffer_map(buffer, &map, GST_MAP_READ))
@@ -158,15 +270,62 @@ public:
             return QImage();
         }
 
+        //Read negotiated caps into GstVideoInfo
         GstCaps *caps = gst_sample_get_caps(sample);
-        GstStructure *s = gst_caps_get_structure(caps, 0);
-        int width, height;
-        gst_structure_get_int(s, "width", &width);
-        gst_structure_get_int(s, "height", &height);
+        GstVideoInfo video_info;
+        if (!caps || !gst_video_info_from_caps(&video_info, caps))
+        {
+            gst_buffer_unmap(buffer, &map);
+            gst_sample_unref(sample);
+            Debug(QS("Failed to get video info from caps"));
+            return QImage();
+        }
 
+        int width = GST_VIDEO_INFO_WIDTH(&video_info);
+        int height = GST_VIDEO_INFO_HEIGHT(&video_info);
+        int stride = GST_VIDEO_INFO_PLANE_STRIDE(&video_info, 0);
+
+        //Translate GStreamer pixel format to QImage format
+        QImage::Format image_format = QImage::Format_Invalid;
+        switch (GST_VIDEO_INFO_FORMAT(&video_info))
+        {
+            case GST_VIDEO_FORMAT_BGRx:
+                //BGRx maps directly to Qt's 32-bit RGB on little-endian
+                image_format = QImage::Format_RGB32;
+                break;
+            case GST_VIDEO_FORMAT_BGRA:
+                //Qt ARGB32 is stored as BGRA in memory on little-endian
+                image_format = QImage::Format_ARGB32;
+                break;
+            case GST_VIDEO_FORMAT_RGBA:
+                image_format = QImage::Format_RGBA8888;
+                break;
+            case GST_VIDEO_FORMAT_RGBx:
+                image_format = QImage::Format_RGBX8888;
+                break;
+            case GST_VIDEO_FORMAT_RGB:
+                image_format = QImage::Format_RGB888;
+                break;
+            case GST_VIDEO_FORMAT_BGR:
+                image_format = QImage::Format_BGR888;
+                break;
+            default:
+                break;
+        }
+
+        if (image_format == QImage::Format_Invalid)
+        {
+            Debug(QS("Unsupported GStreamer pixel format in sample: %s", gst_video_format_to_string(GST_VIDEO_INFO_FORMAT(&video_info))));
+            gst_buffer_unmap(buffer, &map);
+            gst_sample_unref(sample);
+            return QImage();
+        }
+
+        //Copy mapped buffer into owned QImage
+        //Mapped data becomes invalid after unmap and sample unref
         QImage frame(
-            (uchar*)map.data, width, height,
-            QImage::Format_RGB888
+            (uchar*)map.data, width, height, stride,
+            image_format
         );
         QImage copy = frame.copy();
 
@@ -197,7 +356,7 @@ public:
 
 private:
 
-    //Backend state,auto-cleaned up by deleters
+    //Backend state, auto-cleaned up by deleters
     std::unique_ptr<GstElement, GstPipelineDeleter> m_pipeline;
     std::unique_ptr<GstElement, GstElementDeleter> m_sink;
     bool m_gst_initialized;
@@ -218,6 +377,7 @@ enumerateDevices_GStreamer()
     Debug(QS("Enumerating GStreamer video devices..."));
 
     //Initialize GStreamer if not already done
+    //Enumeration can be called without any active backend instance
     if (!gst_is_initialized())
     {
         GError *error = 0;
@@ -231,7 +391,7 @@ enumerateDevices_GStreamer()
         Debug(QS("GStreamer initialized successfully"));
     }
 
-    //Use GStreamer device monitor to enumerate video sources
+    //Device monitor setup
     GstDeviceMonitor *monitor = gst_device_monitor_new();
     if (!monitor)
     {
@@ -244,13 +404,29 @@ enumerateDevices_GStreamer()
     gst_device_monitor_add_filter(monitor, "Video/Source", caps);
     gst_caps_unref(caps);
 
+    //Start monitor
+    //On failure, dump env vars that affect plugin discovery
     if (!gst_device_monitor_start(monitor))
     {
         Debug(QS("Failed to start GstDeviceMonitor"));
+        const QByteArray gst_plugin_path = qgetenv("GST_PLUGIN_PATH");
+        const QByteArray gst_plugin_system_path = qgetenv("GST_PLUGIN_SYSTEM_PATH_1_0");
+        const QByteArray gst_plugin_scanner = qgetenv("GST_PLUGIN_SCANNER");
+        const QByteArray gst_registry = qgetenv("GST_REGISTRY");
+        Debug(QS("GST_PLUGIN_PATH=<%s>", gst_plugin_path.constData()));
+        Debug(QS("GST_PLUGIN_SYSTEM_PATH_1_0=<%s>", gst_plugin_system_path.constData()));
+        Debug(QS("GST_PLUGIN_SCANNER=<%s>", gst_plugin_scanner.constData()));
+        Debug(QS("GST_REGISTRY=<%s>", gst_registry.constData()));
+
+        GstElementFactory *v4l2src_factory = gst_element_factory_find("v4l2src");
+        Debug(QS("gst_element_factory_find(v4l2src) = %s", v4l2src_factory ? "FOUND" : "NOT FOUND"));
+        if (v4l2src_factory)
+            gst_object_unref(v4l2src_factory);
         gst_object_unref(monitor);
         return devices;
     }
 
+    //Enumerate devices
     GList *device_list = gst_device_monitor_get_devices(monitor);
     int device_count = 0;
     for (GList *item = device_list; item != 0; item = item->next)
@@ -259,7 +435,8 @@ enumerateDevices_GStreamer()
         gchar *name = gst_device_get_display_name(device);
         gchar *device_class = gst_device_get_device_class(device);
 
-        //Try to get the actual device path from properties
+        //Resolve device identifier
+        //Prefer an actual /dev/videoN path when the driver exposes it
         GstStructure *props = gst_device_get_properties(device);
         QString identifier;
         if (props)
@@ -273,7 +450,7 @@ enumerateDevices_GStreamer()
             gst_structure_free(props);
         }
         
-        //Fallback: try to find /dev/videoN by index
+        //Fallback: try /dev/videoN by index
         if (identifier.isEmpty())
         {
             QString fallback_path = QString("/dev/video%1").arg(device_count);
@@ -285,7 +462,7 @@ enumerateDevices_GStreamer()
             }
             else
             {
-                //Last resort: use index-based identifier (will fail at init)
+                //Last resort: placeholder identifier
                 identifier = QString("gstreamer:%1").arg(device_count);
                 Debug(QS("WARNING: Could not determine device path, using placeholder: <%s>", CSTR(identifier)));
             }

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2025 Philip Seeger (p@c0xc.net)
+** Copyright (C) 2025 Philip Seeger (philip@c0xc.net)
 ** This file is part of QScan.
 **
 ** QScan is free software: you can redistribute it and/or modify
@@ -27,6 +27,8 @@
 #include <QLabel>
 #include <QAction>
 #include <QSplitter>
+#include <QImage>
+#include <QRectF>
 
 #include "scan/scan_source.hpp"
 #include "scan/scan_manager.hpp"
@@ -36,6 +38,7 @@
 #include "processing/crop_processor.hpp"
 #include "processing/rotate_processor.hpp"
 #include "processing/border_detector.hpp"
+#include "processing/smart_capture_processor.hpp"
 #include "gui/scanpreviewwidget.hpp"
 #include "gui/pagelistwidget.hpp"
 #include "gui/scancontrolpanel.hpp"
@@ -67,13 +70,19 @@ private slots:
     onQuitClicked();
 
     void
-    onPageScanned(const QImage &image, int page_number);
+    onPageScanned(const QImage &image, int page_number, const qscan::ScanPageInfo &page_info);
 
     void
     onScanComplete();
 
     void
+    onScanCanceled();
+
+    void
     onScanError(const QString &error);
+
+    void
+    onScanStatusMessage(const QString &message);
 
     void
     onProgressChanged(int percent);
@@ -91,10 +100,10 @@ private slots:
     onRotateRightRequested();
 
     void
-    onManualCropRequested();
+    onCropModeChanged(int mode);
 
     void
-    onAutoCropChanged(bool enabled);
+    onNextCropRequested();
 
     void
     onAdfModeChanged(bool enabled);
@@ -105,33 +114,53 @@ private slots:
     void
     onPreviewClicked();
 
+    void
+    onPreviewCropRectEdited(const QRectF &normalized_rect);
+
 private:
 
-    // Backend components
+    //Backend components
     ScanSource *m_scan_source;
     Document *m_document;
     DocumentExporter *m_exporter;
     
-    // Processing components
+    //Processing components
     BorderDetector *m_border_detector;
     CropProcessor *m_crop_processor;
     RotateProcessor *m_rotate_processor;
+    SmartCaptureProcessor *m_smart_capture_processor;
 
-    // GUI components
+    //GUI components
     ScanPreviewWidget *m_preview;
     PageListWidget *m_page_list;
     ScanControlPanel *m_control_panel;
     QSplitter *m_splitter;
     QToolBar *m_toolbar;
     QStatusBar *m_status_bar;
+    QLabel *m_scanner_status_label;
+    QLabel *m_page_status_label;
     QLabel *m_size_status_label;
+    QLabel *m_branding_label;
     
     //State
-    bool m_autocrop_enabled;
+    ScanControlPanel::CropMode m_crop_mode;
+    int m_current_page_index;
 
-    // Actions
+    //Preview state (for sources where no document page exists yet)
+    QImage m_last_preview_image;
+    QRectF m_last_preview_crop_rect_norm;
+
+    //Scan-session state: map backend page_number -> document page index
+    int m_scan_session_base_index;
+    int m_scan_session_precreated_blank_index;
+    bool m_scan_session_has_received_page;
+    ScanParameters m_scan_session_params;
+    bool m_scan_session_params_valid;
+
+    //Actions
     QAction *m_act_preview;
     QAction *m_act_scan;
+    QAction *m_act_cancel;
     QAction *m_act_save;
     QAction *m_act_quit;
 
@@ -147,6 +176,15 @@ private:
     void
     updateStatusBar();
 
+    void
+    updatePageStatusLabel();
+
+    void
+    selectPage(int index);
+
+    void
+    removePendingBlankPage(int index);
+
     QString
     getSaveFileName();
 
@@ -157,11 +195,17 @@ private:
     hidePageList();
 
     void
-    applyRotationToCurrentPage(int degrees);
+    applyRotation(int degrees);
+
+    QRectF
+    detectAutoCropRectNorm(const QImage &image) const;
 
     void
-    applyAutoCropToImage(QImage &image);
+    updateCameraWarp(ScannedPage &page);
+
+    void
+    showPreviewWithCrop(const QImage &image, const QRectF &crop_rect_norm);
 
 };
 
-#endif // GUI_MAINWINDOW_HPP
+#endif //GUI_MAINWINDOW_HPP

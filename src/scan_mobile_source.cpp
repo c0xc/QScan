@@ -31,16 +31,15 @@ MobileSource::MobileSource(const QString &device_identifier,
               m_is_initialized(false),
                             m_live_preview_active(false),
                             m_preview_timer(nullptr),
-                            m_backend_url("http://127.0.0.1:8765"),
+                                                        m_backend_url(),
                             m_session_id()
 {
-    //Configure capabilities for mobile video input
-    m_capabilities.preview_mode = PreviewMode::LiveStream;
+    //Mobile/phone input is not implemented yet
+    //Keep capabilities conservative so UI/logic doesn't assume support
+    m_capabilities.preview_mode = PreviewMode::None;
     m_capabilities.supports_multi_page = false;
     m_capabilities.supports_auto_feed = false;
     m_capabilities.supports_scan_settings = false;
-    m_capabilities.supported_resolutions << 720 << 1080 << 4000;
-    m_capabilities.supported_color_modes << "Color";
 }
 
 MobileSource::~MobileSource()
@@ -54,12 +53,9 @@ MobileSource::~MobileSource()
 QList<ScanDeviceInfo>
 MobileSource::enumerateDevices()
 {
-    QList<ScanDeviceInfo> devices;
-    // For now, add a dummy mobile device as a stub
-    // In a real implementation, this would enumerate actual mobile devices
-    ScanDeviceInfo info("mobile:default", "Mobile Camera (Stub)", ScanDeviceType::MOBILE);
-    devices.append(info);
-    return devices;
+    //Not implemented yet
+    //Keep enumeration empty so nothing user-visible is exposed prematurely
+    return QList<ScanDeviceInfo>();
 }
 
 ScanCapabilities
@@ -91,7 +87,7 @@ MobileSource::initialize()
 
     Debug(QS("Initializing mobile device <%s>...", CSTR(m_device_identifier)));
     
-    // In a real implementation, this would initialize the mobile camera
+    //In a real implementation, this would initialize the mobile camera
     m_is_initialized = true;
     return true;
 }
@@ -99,28 +95,11 @@ MobileSource::initialize()
 bool
 MobileSource::startScan(const ScanParameters &params)
 {
-    if (!m_is_initialized)
-        return false;
+    Q_UNUSED(params)
 
-    m_is_scanning = true;
-    emit scanStarted();
-
-    //Capture single frame as scan (high-res photo in real implementation)
-    QImage frame(640, 480, QImage::Format_RGB888);
-    frame.fill(Qt::lightGray);
-
-    if (!frame.isNull())
-    {
-        emit pageScanned(frame, 0);
-        emit scanComplete();
-    }
-    else
-    {
-        emit scanError("Failed to capture image from mobile device");
-    }
-
-    m_is_scanning = false;
-    return !frame.isNull();
+    //Mobile/phone scanning is not available until the backend/API is implemented
+    emit scanError(tr("Phone input is not available."));
+    return false;
 }
 
 void
@@ -144,56 +123,24 @@ MobileSource::isOpen() const
 bool
 MobileSource::startPreview()
 {
-    if (!m_is_initialized)
-    {
-        Debug(QS("startPreview: mobile device not initialized"));
-        return false;
-    }
-
-    if (m_live_preview_active)
-        return true;
-
-    Debug(QS("Starting mobile preview stream"));
-    
-    //Start mobile preview (stub emits frames using timer)
-    m_live_preview_active = true;
-
-    if (!m_preview_timer)
-    {
-        m_preview_timer = new QTimer(this);
-        connect(m_preview_timer, SIGNAL(timeout()), this, SLOT(onPreviewTimer()));
-    }
-    m_preview_timer->start(100);
-    
-    return true;
+    emit scanError(tr("Phone preview is not available."));
+    return false;
 }
 
 void
 MobileSource::stopPreview()
 {
-    if (!m_live_preview_active)
-        return;
-
-    Debug(QS("Stopping mobile preview stream"));
-    if (m_preview_timer)
-        m_preview_timer->stop();
-    m_live_preview_active = false;
+    //No-op while unimplemented
 }
 
 bool
 MobileSource::isPreviewActive() const
 {
-    return m_live_preview_active;
+    return false;
 }
 
 void
 MobileSource::onPreviewTimer()
 {
-    if (!m_live_preview_active)
-        return;
-
-    //Stub frame that will later be replaced by backend stream
-    QImage frame(640, 480, QImage::Format_RGB888);
-    frame.fill(Qt::darkGray);
-    emit previewFrameReady(frame);
+    //Unused while unimplemented
 }

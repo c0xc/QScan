@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2025 Philip Seeger (p@c0xc.net)
+** Copyright (C) 2025 Philip Seeger (philip@c0xc.net)
 ** This file is part of QScan.
 **
 ** QScan is free software: you can redistribute it and/or modify
@@ -25,13 +25,17 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QVBoxLayout>
+#include <QModelIndex>
+#include <QPoint>
+#include <QUrl>
+
+class QEvent;
 
 #include "document/document.hpp"
 
 /**
  * Widget displaying thumbnails of scanned pages.
  * Allows reordering, deleting, and adding pages.
- * Only visible in DOCUMENT_MODE.
  */
 class PageListWidget : public QWidget
 {
@@ -54,6 +58,9 @@ public:
      */
     int
     selectedPageIndex() const;
+
+    void
+    selectPageIndex(int index);
 
 signals:
 
@@ -83,11 +90,29 @@ private slots:
     void
     onDocumentPageRemoved(int index);
 
+    void
+    onDocumentPagesReordered();
+
+    void
+    onListContextMenuRequested(const QPoint &pos);
+
+    void
+    onListRowsMoved(const QModelIndex &sourceParent, int sourceStart, int sourceEnd,
+                    const QModelIndex &destinationParent, int destinationRow);
+
+protected:
+
+    bool
+    eventFilter(QObject *obj, QEvent *event) override;
+
 private:
 
     Document *m_document;
     QListWidget *m_list;
     QPushButton *m_btn_delete;
+
+    bool m_ignore_document_reorder;
+    bool m_ignore_list_rows_moved;
 
     void
     setupUi();
@@ -95,6 +120,12 @@ private:
     void
     updateThumbnail(int index);
 
+    void
+    renumberListItems();
+
+    bool
+    tryImportDroppedPdfs(const QList<QUrl> &urls, const QPoint &pos);
+
 };
 
-#endif // GUI_PAGELISTWIDGET_HPP
+#endif //GUI_PAGELISTWIDGET_HPP

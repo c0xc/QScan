@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2025 Philip Seeger (p@c0xc.net)
+** Copyright (C) 2025 Philip Seeger (philip@c0xc.net)
 ** This file is part of QScan.
 **
 ** QScan is free software: you can redistribute it and/or modify
@@ -104,4 +104,4 @@ private:
 
 };
 
-#endif // SCAN_WEBCAM_SOURCE_HPP
+#endif //SCAN_WEBCAM_SOURCE_HPP

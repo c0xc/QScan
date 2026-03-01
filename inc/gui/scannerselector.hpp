@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2025 Philip Seeger (p@c0xc.net)
+** Copyright (C) 2025 Philip Seeger (philip@c0xc.net)
 ** This file is part of QScan.
 **
 ** QScan is free software: you can redistribute it and/or modify
@@ -28,6 +28,10 @@
 #include <QHBoxLayout>
 #include <QPushButton>
 #include <QLabel>
+#include <QLineEdit>
+#include <QMessageBox>
+#include <QToolButton>
+#include <QWidget>
 
 #include "scan/scan_manager.hpp"
 #include "document/document.hpp"
@@ -43,7 +47,7 @@ class ScannerSelector : public QDialog
 public:
 
     explicit
-    ScannerSelector(ScanManager *manager, QWidget *parent = nullptr);
+    ScannerSelector(ScanManager *manager, QWidget *parent = 0);
 
     /**
      * Get the device name selected by user.
@@ -64,18 +68,55 @@ private:
     ScanManager *m_scan_manager;
     QString m_selected_device;
 
-    // UI elements
+    //UI elements
     QListWidget *m_device_list;
     QLabel *m_capabilities_label;
     QPushButton *m_btn_ok;
     QPushButton *m_btn_cancel;
 
+    //Manual sources
+    QToolButton *m_btn_add_source;
+    QPushButton *m_btn_remove_source;
+
+    //eSCL add panel (hidden until Add Source...)
+    QWidget *m_escl_panel;
+    QLineEdit *m_escl_url_edit;
+    QPushButton *m_btn_escl_test;
+    QLabel *m_escl_status;
+    QLineEdit *m_escl_label_edit;
+    QPushButton *m_btn_escl_save;
+    QPushButton *m_btn_escl_cancel;
+    QString m_escl_tested_url;
+
     void
     setupUi();
 
     void
+    populateDeviceList();
+
+    void
+    restoreLastSelection();
+
+    void
     updateCapabilitiesDisplay();
+
+private slots:
+
+    void
+    onAddEsclSourceRequested();
+
+    void
+    onEsclTestClicked();
+
+    void
+    onEsclSaveClicked();
+
+    void
+    onEsclCancelClicked();
+
+    void
+    onRemoveNetworkScannerClicked();
 
 };
 
-#endif // GUI_SCANNERSELECTOR_HPP
+#endif //GUI_SCANNERSELECTOR_HPP

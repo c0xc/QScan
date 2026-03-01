@@ -1,21 +1,26 @@
 #!/bin/bash
-# Build script for QScan using Podman container with Qt 6
-# Extended to create AppImage with bundled dependencies
+# Build script for QScan using container with Qt 6 -> AppImage
 #
-# Usage: ./scripts/build.sh [--rebuild-container]
+# Usage: ./scripts/build.sh [--rebuild-container] [--no-gst]
 #   --rebuild-container: Force rebuild of the container image
+#   --no-gst: Build without GStreamer (forces QtCamera-only webcam backend if enabled)
 
-set -e  # Exit on error
+set -e
 
-# Base container image name (Qt environment)
-BASE_IMAGE="qt-6.4-fedora-36"
-#BASE_IMAGE="qt-6.10.1-fedora"
-
-# Build image name (with QScan dependencies)
+# Build container env
+OCI_ENGINE="${OCI_ENGINE:-podman}"
+CREATE_APPIMAGE="${CREATE_APPIMAGE:-true}"
+# Base container image (Qt environment)
+#BASE_IMAGE="${BASE_IMAGE:-qt-6.4-fedora-36}"
+BASE_IMAGE="${BASE_IMAGE:-qt-6.10.1-fedora}"
 BUILD_IMAGE="qscan-fedora-36"
 
-# AppImage creation flag
-CREATE_APPIMAGE="${CREATE_APPIMAGE:-true}"
+# CMake feature flags
+CMAKE_FLAGS=(
+    # -DQSCAN_ENABLE_GSTREAMER=ON
+    -DQSCAN_ENABLE_QPDF=ON
+    # -DQSCAN_ENABLE_OPENCV=ON
+)
 
 # Parse command line arguments
 REBUILD_CONTAINER=false
@@ -25,17 +30,25 @@ for arg in "$@"; do
             REBUILD_CONTAINER=true
             shift
             ;;
+        --no-gst)
+            for i in "${!CMAKE_FLAGS[@]}"; do
+                if [[ "${CMAKE_FLAGS[$i]}" == -DQSCAN_ENABLE_GSTREAMER=* ]]; then
+                    CMAKE_FLAGS[$i]='-DQSCAN_ENABLE_GSTREAMER=OFF'
+                fi
+            done
+            shift
+            ;;
     esac
 done
 
-# Check if podman is available
-if ! command -v podman &> /dev/null; then
-    echo "Error: podman is not installed"
+# Check if container runtime is available
+if ! command -v "$OCI_ENGINE" &> /dev/null; then
+    echo "Error: $OCI_ENGINE is not installed"
     exit 1
 fi
 
-## Check if the base Qt container image exists
-#if ! podman image exists "$BASE_IMAGE"; then
+# Check if the base Qt container image exists
+# if ! "$CONTAINER" image exists "$BASE_IMAGE"; then
 #    echo "Warning: Base container image '$BASE_IMAGE' not found"
 #    echo "Falling back to local build..."
 #    
@@ -73,58 +86,56 @@ fi
 #        exit 1
 #    fi
 #    exit 0
-#fi
+# fi
 
 # Check if we need to rebuild the container image
 if [ "$REBUILD_CONTAINER" = true ]; then
     echo "Forcing rebuild of container image '$BUILD_IMAGE'..."
-    podman rmi -f "$BUILD_IMAGE" 2>/dev/null || true
+    "$OCI_ENGINE" rmi -f "$BUILD_IMAGE" 2>/dev/null || true
 fi
 
 # Check if build image exists, create it if not
-if ! podman image exists "$BUILD_IMAGE"; then
+if ! "$OCI_ENGINE" image exists "$BUILD_IMAGE"; then
     echo "Build image '$BUILD_IMAGE' not found. Creating it from '$BASE_IMAGE'..."
-    
+
     # Determine the project root directory
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-    
-    echo "Building custom image with dependencies from Dockerfile..."
-    # Use the project Dockerfile
-    podman build \
+
+    # Create the container image
+    echo "Creating container image: $BUILD_IMAGE from base image '$BASE_IMAGE'..."
+    "$OCI_ENGINE" build \
         --build-arg BASE_IMAGE="$BASE_IMAGE" \
         -t "$BUILD_IMAGE" \
-        -f "$PROJECT_DIR/Dockerfile" \
+        -f "$PROJECT_DIR/scripts/Dockerfile" \
         --cgroup-manager=cgroupfs \
         "$PROJECT_DIR"
-    
     if [ $? -ne 0 ]; then
         echo "Error: Failed to create build image"
         exit 1
     fi
-    
+
     echo "Build image '$BUILD_IMAGE' created successfully!"
 fi
 
-# Build using Podman container
-echo "Building QScan using Podman container: $BUILD_IMAGE"
+echo "Building QScan in container: $BUILD_IMAGE"
 
 PROJECT_DIR=$(pwd)
-BUILD_DIR="$PROJECT_DIR/build"
+BUILD_DIR="$PROJECT_DIR/build-appimage"
 
 # Create build directory
 mkdir -p "$BUILD_DIR"
 
 # Run build in container
-podman run --rm \
+"$OCI_ENGINE" run --rm \
     -v "$PROJECT_DIR:/workspace:Z" \
     -w /workspace \
     "$BUILD_IMAGE" \
     bash -c "
-        rm -rf build && \
-        mkdir -p build && \
-        cd build && \
-        cmake .. -DQSCAN_ENABLE_GSTREAMER=ON && \
+        rm -rf build-appimage && \
+        mkdir -p build-appimage && \
+        cd build-appimage && \
+        cmake .. ${CMAKE_FLAGS[*]} && \
         make -j\$(nproc)
     "
 
@@ -140,11 +151,11 @@ if [ $? -eq 0 ]; then
         echo "========================================"
         
         # Run AppImage creation in container
-        podman run --rm \
+        "$OCI_ENGINE" run --rm \
             -v "$PROJECT_DIR:/workspace:Z" \
             -w /workspace \
             "$BUILD_IMAGE" \
-            bash -c "bash /workspace/scripts/create-appimage.sh"
+            bash -c "BUILD_DIR=/workspace/build-appimage bash /workspace/scripts/create-appimage.sh"
         
         if [ $? -eq 0 ]; then
             echo ""

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2025 Philip Seeger (p@c0xc.net)
+** Copyright (C) 2025 Philip Seeger (philip@c0xc.net)
 ** This file is part of QScan.
 **
 ** QScan is free software: you can redistribute it and/or modify
@@ -88,13 +88,13 @@ private:
     bool m_is_initialized;
     bool m_live_preview_active;
 
-    //Preview timer stub,will be replaced by http/websocket stream
+    //Preview timer (unused until implemented)
     QTimer *m_preview_timer;
 
-    //Stub endpoint details,used by future python backend integration
+    //Backend session state (implementation TBD)
     QString m_backend_url;
     QString m_session_id;
 
 };
 
-#endif // SCAN_MOBILE_SOURCE_HPP
+#endif //SCAN_MOBILE_SOURCE_HPP

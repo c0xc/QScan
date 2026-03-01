@@ -27,17 +27,21 @@ CropProcessor::CropProcessor()
 QImage
 CropProcessor::crop(const QImage &input, const QRect &rect)
 {
-    // TODO: Implement cropping
-    // For now, return a copy of the input
-    return input.copy(rect);
+    if (input.isNull())
+        return QImage();
+
+    const QRect clipped = rect.intersected(input.rect());
+    if (!clipped.isValid() || clipped.isNull())
+        return input.copy();
+
+    return input.copy(clipped);
 }
 
 QImage
-CropProcessor::cropToQuad(const QImage &input, const QPolygonF &quad)
+CropProcessor::crop(const QImage &input, const QPolygonF &quad)
 {
-    // TODO: Implement quad cropping
-    // Without OpenCV: simple bounding box crop
-    // With OpenCV: delegate to SmartCaptureProcessor for perspective warp
+    //TODO quad crop
+    //Fallback bounding box crop
     QRectF bounds = quad.boundingRect();
     return input.copy(bounds.toRect());
 }
@@ -45,7 +49,7 @@ CropProcessor::cropToQuad(const QImage &input, const QPolygonF &quad)
 QImage
 CropProcessor::process(const QImage &input)
 {
-    // No-op: return copy of entire image
+    //No-op copy of full image
     return input.copy();
 }
 
@@ -58,5 +62,5 @@ CropProcessor::name() const
 bool
 CropProcessor::isAvailable() const
 {
-    return true;  // Always available (Qt-only)
+    return true; //always available (Qt-only)
 }

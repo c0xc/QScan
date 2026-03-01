@@ -37,4 +37,4 @@
 
 #define PROGRAM "QScan"
 
-#endif // CORE_MAIN_HPP
+#endif //CORE_MAIN_HPP

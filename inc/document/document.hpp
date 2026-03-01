@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2025 Philip Seeger (p@c0xc.net)
+** Copyright (C) 2025 Philip Seeger (philip@c0xc.net)
 ** This file is part of QScan.
 **
 ** QScan is free software: you can redistribute it and/or modify
@@ -23,13 +23,13 @@
 
 #include <QObject>
 #include <QList>
+#include <QDateTime>
 
 #include "document/scannedpage.hpp"
 
 /**
  * Represents a multi-page scanned document.
  * Manages a collection of ScannedPage objects.
- * Note: ScanMode is deprecated - the UI now adapts dynamically based on page count.
  */
 class Document : public QObject
 {
@@ -42,13 +42,27 @@ public:
      */
     enum ScanMode
     {
-        IMAGE_MODE,    // Deprecated
-        DOCUMENT_MODE  // Deprecated
+        IMAGE_MODE,    //deprecated
+        DOCUMENT_MODE  //deprecated
     };
     Q_ENUM(ScanMode)
 
-    explicit
-    Document(QObject *parent = nullptr);
+    Document(QObject *parent = 0);
+
+    void
+    setCreatorProgram(const QString &name);
+
+    QString
+    creatorProgram() const;
+
+    void
+    setCreatorAuthor(const QString &author);
+
+    QString
+    creatorAuthor() const;
+
+    QDateTime
+    createdTime() const;
 
     /**
      * Add a page to the document.
@@ -141,6 +155,10 @@ private:
     QList<ScannedPage> m_pages;
     ScanMode m_mode;
 
+    QString m_creator_program;
+    QString m_creator_author;
+    QDateTime m_created_time;
+
 };
 
-#endif // DOCUMENT_DOCUMENT_HPP
+#endif //DOCUMENT_DOCUMENT_HPP

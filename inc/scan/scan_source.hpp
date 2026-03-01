@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2025 Philip Seeger (p@c0xc.net)
+** Copyright (C) 2025 Philip Seeger (philip@c0xc.net)
 ** This file is part of QScan.
 **
 ** QScan is free software: you can redistribute it and/or modify
@@ -28,6 +28,7 @@
 #include <QSizeF>
 
 #include "scan/scan_capabilities.hpp"
+#include "scan/scan_page_info.hpp"
 
 class ScanSource : public QObject
 {
@@ -74,14 +75,23 @@ public:
     virtual bool
     isPreviewActive() const { return false; }
 
+    struct ReportedDocumentSize
+    {
+        bool valid = false;
+        QSizeF mm_size;
+        QString paper_name;
+    };
+
+    //Returns physical paper size only when the backend/device truly reports it
+    //No estimates/guesses should be surfaced here
+    virtual ReportedDocumentSize
+    reportedDocumentSize() const { return ReportedDocumentSize(); }
+
     virtual QSizeF
     currentDocumentSize() const { return QSizeF(); }
 
     virtual bool
-    documentSizeIsReported() const { return false; }
-
-    virtual bool
-    documentSizeWasAutoDetected() const { return false; }
+    documentSizeIsReported() const { return reportedDocumentSize().valid; }
 
 signals:
 
@@ -89,13 +99,22 @@ signals:
     scanStarted();
 
     void
-    pageScanned(const QImage &image, int page_number);
+    pageScanned(const QImage &image, int page_number, const qscan::ScanPageInfo &page_info);
 
     void
     scanComplete();
 
     void
+    scanCanceled();
+
+    void
     scanError(const QString &error);
+
+    void
+    scanCancelRequested();
+
+    void
+    scanStatusMessage(const QString &message);
 
     void
     progressChanged(int percent);
@@ -105,4 +124,4 @@ signals:
 
 };
 
-#endif // SCAN_SCAN_SOURCE_HPP
+#endif //SCAN_SCAN_SOURCE_HPP

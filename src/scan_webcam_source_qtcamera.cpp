@@ -21,16 +21,19 @@
 //Qt6 QCamera implementation for webcam capture
 #ifdef USE_QTCAMERA
 
-#include "scan/webcam_backend.hpp"
-#include "scan/scan_device_info.hpp"
-#include "core/classlogger.hpp"
+#include <memory>
+
 #include <QCamera>
 #include <QMediaCaptureSession>
 #include <QVideoSink>
 #include <QVideoFrame>
 #include <QMediaDevices>
 #include <QCameraDevice>
-#include <memory>
+#include <QImage>
+
+#include "scan/webcam_backend.hpp"
+#include "scan/scan_device_info.hpp"
+#include "core/classlogger.hpp"
 
 class QtCameraWebcamBackend : public WebcamBackend
 {
@@ -49,12 +52,18 @@ public:
     bool
     initialize(const QString &device_id) override
     {
+        QString raw_id = device_id;
+        if (raw_id.startsWith(QStringLiteral("qcamera:")))
+            raw_id = raw_id.mid(QStringLiteral("qcamera:").size());
+        else if (raw_id.startsWith(QStringLiteral("qtcamera:")))
+            raw_id = raw_id.mid(QStringLiteral("qtcamera:").size());
+
         QList<QCameraDevice> camera_devices = QMediaDevices::videoInputs();
         QCameraDevice selected_device;
 
         for (const QCameraDevice &cam_device : camera_devices)
         {
-            if (QString::fromUtf8(cam_device.id()) == device_id)
+            if (QString::fromUtf8(cam_device.id()) == raw_id)
             {
                 selected_device = cam_device;
                 break;
@@ -63,7 +72,7 @@ public:
 
         if (selected_device.isNull())
         {
-            Debug(QS("FAILED to find camera device with id <%s>", CSTR(device_id)));
+            Debug(QS("FAILED to find camera device with id <%s> (raw=%s)", CSTR(device_id), CSTR(raw_id)));
             return false;
         }
 
@@ -74,6 +83,29 @@ public:
         m_capture_session->setCamera(m_camera.get());
         m_capture_session->setVideoSink(m_video_sink.get());
 
+        QObject::connect(
+            m_video_sink.get(),
+            &QVideoSink::videoFrameChanged,
+            [this](const QVideoFrame &frame)
+            {
+                if (!frame.isValid())
+                    return;
+                const QImage img = frame.toImage();
+                if (img.isNull())
+                    return;
+                m_last_image = img;
+            }
+        );
+
+        QObject::connect(
+            m_camera.get(),
+            &QCamera::errorOccurred,
+            [](QCamera::Error error, const QString &error_string)
+            {
+                Debug(QS("QtCamera errorOccurred: %d (%s)", static_cast<int>(error), CSTR(error_string)));
+            }
+        );
+
         Debug(QS("Successfully created Qt6 QCamera for <%s>", CSTR(device_id)));
         return true;
     }
@@ -81,24 +113,9 @@ public:
     QImage
     captureFrame() override
     {
-        if (!m_video_sink)
-            return QImage();
-
-        QVideoFrame frame = m_video_sink->videoFrame();
-        if (!frame.isValid())
-        {
+        if (m_last_image.isNull())
             Debug(QS("No valid video frame available"));
-            return QImage();
-        }
-
-        QImage image = frame.toImage();
-        if (image.isNull())
-        {
-            Debug(QS("Failed to convert video frame to image"));
-            return QImage();
-        }
-
-        return image;
+        return m_last_image;
     }
 
     bool
@@ -106,7 +123,9 @@ public:
     {
         if (m_camera)
         {
+            m_last_image = QImage();
             m_camera->start();
+            Debug(QS("QtCamera start(): active=%d", m_camera->isActive() ? 1 : 0));
             return true;
         }
         return false;
@@ -125,6 +144,7 @@ private:
     std::unique_ptr<QCamera> m_camera;
     std::unique_ptr<QMediaCaptureSession> m_capture_session;
     std::unique_ptr<QVideoSink> m_video_sink;
+    QImage m_last_image;
 
 };
 
@@ -149,11 +169,13 @@ enumerateDevices_QtCamera()
     for (int i = 0; i < camera_devices.size(); ++i)
     {
         const QCameraDevice &cam_device = camera_devices.at(i);
-        QString identifier = QString::fromUtf8(cam_device.id());
+        const QString raw_id = QString::fromUtf8(cam_device.id());
+        const QString identifier = QStringLiteral("qcamera:") + raw_id;
         QString desc = cam_device.description();
-        
-        if (desc.isEmpty())
-            desc = QString("Camera %1").arg(i);
+
+        const QString desc_norm = desc.trimmed().toLower();
+        if (desc_norm.isEmpty() || desc_norm == QStringLiteral("v4l2"))
+            desc = QString("Camera %1").arg(i + 1);
 
         Debug(QS("Found Qt6 camera [%d]: id=<%s>, description=<%s>",
                  i, CSTR(identifier), CSTR(desc)));

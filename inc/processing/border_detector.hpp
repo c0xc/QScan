@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2025 Philip Seeger (p@c0xc.net)
+** Copyright (C) 2025 Philip Seeger (philip@c0xc.net)
 ** This file is part of QScan.
 **
 ** QScan is free software: you can redistribute it and/or modify
@@ -21,8 +21,10 @@
 #ifndef PROCESSING_BORDER_DETECTOR_HPP
 #define PROCESSING_BORDER_DETECTOR_HPP
 
-#include "processing/image_processor.hpp"
 #include <QRect>
+#include <QVector>
+
+#include "processing/image_processor.hpp"
 
 /**
  * Border detector - detects content bounds and skew in scanned images.
@@ -41,6 +43,20 @@ class BorderDetector : public ImageProcessor
 {
 public:
 
+    struct ContentBounds
+    {
+        QRect best;
+        QVector<QRect> candidates; //TODO
+        bool confident;
+
+        ContentBounds()
+            : best(),
+              candidates(),
+              confident(false)
+        {
+        }
+    };
+
     BorderDetector();
 
     /**
@@ -53,6 +69,9 @@ public:
      */
     QRect
     detectContentBounds(const QImage &input);
+
+    ContentBounds
+    detectBorders(const QImage &input);
 
     /**
      * Detect rotation angle (slight deskew).
@@ -81,4 +100,4 @@ public:
 
 };
 
-#endif // PROCESSING_BORDER_DETECTOR_HPP
+#endif //PROCESSING_BORDER_DETECTOR_HPP

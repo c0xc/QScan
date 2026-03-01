@@ -46,7 +46,7 @@
 
 #define Debug(x) ClassLogger::logMsg(x, 10, __FILE__, __LINE__, Q_FUNC_INFO)
 
-//NOTE use Debug(QS(...)), don't forget QS() or else...
+//NOTE use Debug(QS(...)), don't forget QS() or else
 //TODO DEBUG() << "text" << var << ptr; (stream op)
 
 class QStr

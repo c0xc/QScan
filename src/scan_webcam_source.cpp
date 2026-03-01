@@ -18,11 +18,15 @@
 **
 ****************************************************************************/
 
+#include <memory>
+
+#include <QCoreApplication>
+#include <QElapsedTimer>
+#include <QThread>
+
 #include "scan/webcam_source.hpp"
 #include "scan/webcam_backend.hpp"
 #include "core/classlogger.hpp"
-
-#include <memory>
 
 //Forward declarations for platform-specific implementations
 #ifdef USE_GSTREAMER
@@ -52,7 +56,7 @@ WebcamSource::WebcamSource(const QString &device_identifier,
     m_capabilities.preview_mode = PreviewMode::LiveStream;
     m_capabilities.supports_multi_page = false;
     m_capabilities.supports_auto_feed = false;
-    m_capabilities.supports_scan_settings = false;  //Webcams don't need scan parameter controls
+    m_capabilities.supports_scan_settings = false; //webcams don't need scan parameter controls
 
     //Prefer GStreamer if available, otherwise fall back to QtCamera
     const char *backend_name = "none";
@@ -67,7 +71,7 @@ WebcamSource::WebcamSource(const QString &device_identifier,
     Debug(QS("WebcamSource: backend active = %s", backend_name));
 
     m_preview_timer = new QTimer(this);
-    m_preview_timer->setInterval(33); //~30 fps
+    m_preview_timer->setInterval(33); //~30 fps, polling captureFrame() without forcing a hard realtime rate
     connect(m_preview_timer, SIGNAL(timeout()), this, SLOT(onPreviewTimer()));
 }
 
@@ -155,13 +159,42 @@ WebcamSource::startScan(const ScanParameters &params)
     
     m_is_scanning = true;
     emit scanStarted();
-    
+
     //Capture a single frame
-    QImage frame = captureFrame();
-    
+    //QtCamera often has no frame until stream is started
+    const bool was_preview_active = m_live_preview_active;
+    if (!was_preview_active)
+    {
+        Debug(QS("startScan: starting webcam stream for single capture"));
+        if (!startPreview())
+            Debug(QS("startScan: startPreview() failed (continuing, capture may fail)"));
+    }
+
+    QImage frame;
+    QElapsedTimer t;
+    t.start();
+    while (frame.isNull() && t.elapsed() < 1500)
+    {
+        //Allow queued multimedia events (e.g. QVideoSink::videoFrameChanged) to be delivered
+        //Without this, QtCamera capture can starve while we block the GUI thread
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 30);
+        frame = captureFrame();
+        if (!frame.isNull())
+            break;
+        QThread::msleep(10);
+    }
+
+    if (!was_preview_active)
+    {
+        Debug(QS("startScan: stopping webcam stream after single capture"));
+        stopPreview();
+    }
+
     if (!frame.isNull())
     {
-        emit pageScanned(frame, 0);
+        qscan::ScanPageInfo info;
+        info.backend_kind = "Webcam";
+        emit pageScanned(frame, 0, info);
         emit scanComplete();
     }
     else
@@ -169,7 +202,7 @@ WebcamSource::startScan(const ScanParameters &params)
         Debug(QS("startScan: failed to capture frame from <%s>", CSTR(m_device_identifier)));
         emit scanError("Failed to capture frame from webcam");
     }
-    
+
     m_is_scanning = false;
     return !frame.isNull();
 }
@@ -191,6 +224,7 @@ WebcamSource::queryCapabilities()
 {
     //Webcam capabilities are mostly fixed
     m_capabilities.supports_color_mode = true;
+    //Common webcam width presets
     m_capabilities.supported_resolutions << 640 << 1280 << 1920;
     m_capabilities.supported_color_modes << "Color";
 }
@@ -272,7 +306,7 @@ WebcamSource::onPreviewTimer()
     else
     {
         m_frame_fail_count++;
-        //Stop preview after 10 consecutive failures (~330ms)
+        //Stop preview after 10 consecutive failures (~330ms at 33ms interval)
         if (m_frame_fail_count >= 10)
         {
             Debug(QS("Too many consecutive frame capture failures (%d), stopping preview", m_frame_fail_count));

@@ -58,12 +58,12 @@ SettingsManager::SettingsManager(const SettingsManager &other)
 {
     //Explicit copy constructor - even though we sometimes want
     //the same behavior that we'd have with the implicit one,
-    //but see group accessor for that.
+    //but see group accessor for that
     //If a settings manager object is copied implicitly,
-    //its (unsaved) user data is copied as well.
-    //So if the copied object is modified, it has to be saved explicitly.
+    //its (unsaved) user data is copied as well
+    //So if the copied object is modified, it has to be saved explicitly
     //The group accessor has a boolean parameter to change that,
-    //so that the temporary copy modifies the data of the original object.
+    //so that the temporary copy modifies the data of the original object
     m_data = &m_data_obj;
 }
 
@@ -214,7 +214,7 @@ SettingsManager::groupAccessor(const QString &name, bool modify_parent)
 {
     //This assignment requires a working copy assignment operator!
     //Otherwise m_data would point to a member
-    //of group_accessor, which is limited to the scope of this function.
+    //of group_accessor, which is limited to the scope of this function
     SettingsManager group_accessor = *this; //copy this object
     if (modify_parent)
     {
@@ -250,8 +250,8 @@ SettingsManager::setVariant(const QString &key, const QVariant &value)
 //QVariant
 //SettingsManager::setDefaultVariant(const QString &key, const QVariant &default_value)
 //{
-//    //TODO
-//    return QVariant();
+//TODO
+//return QVariant();
 //}
 
 QStringList
@@ -336,7 +336,7 @@ SettingsManager::setVariant(const QStringList &dict_keys, const QString &item_ke
     cur_map[item_key] = value;
 
     //Now, we need to copy each nested dict (again)
-    //and put them all together.
+    //and put them all together
     //(We would not really have to do that if we'd be limited to one level.)
     //(But having only one level would be boring.)
     //(One level could be simplified to: QMap -> QVariantMap -> QJsonObject)
@@ -428,7 +428,7 @@ SettingsManager::splitItemKey(const QString &key, bool use_default_group) const
 QVariantMap&
 SettingsManager::stateMap()
 {
-    //Creates, returns global map, used to keep config, path etc.
+    //Creates, returns global map, used to keep config, path etc
     static QVariantMap map;
     return map;
 }

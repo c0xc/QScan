@@ -18,8 +18,9 @@
 **
 ****************************************************************************/
 
-#include "processing/rotate_processor.hpp"
 #include <QTransform>
+
+#include "processing/rotate_processor.hpp"
 
 RotateProcessor::RotateProcessor()
 {
@@ -28,8 +29,8 @@ RotateProcessor::RotateProcessor()
 QImage
 RotateProcessor::rotate(const QImage &input, int degrees)
 {
-    // TODO: Implement rotation for 90° increments
-    // For now, use QTransform
+    //TODO: Implement rotation for 90° increments
+    //For now, use QTransform
     QTransform transform;
     transform.rotate(degrees);
     return input.transformed(transform);
@@ -38,8 +39,8 @@ RotateProcessor::rotate(const QImage &input, int degrees)
 QImage
 RotateProcessor::rotate(const QImage &input, double degrees, QColor fill)
 {
-    // TODO: Implement arbitrary angle rotation with background fill
-    // For now, use QTransform
+    //TODO: Implement arbitrary angle rotation with background fill
+    //For now, use QTransform
     QTransform transform;
     transform.rotate(degrees);
     return input.transformed(transform, Qt::SmoothTransformation);
@@ -48,7 +49,7 @@ RotateProcessor::rotate(const QImage &input, double degrees, QColor fill)
 QImage
 RotateProcessor::process(const QImage &input)
 {
-    // No-op: return copy with no rotation
+    //No-op: return copy with no rotation
     return input.copy();
 }
 
@@ -61,5 +62,5 @@ RotateProcessor::name() const
 bool
 RotateProcessor::isAvailable() const
 {
-    return true;  // Always available (Qt-only)
+    return true;  //always available (Qt-only)
 }
