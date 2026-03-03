@@ -4,6 +4,7 @@ VERSION
 /obj/
 /bin/
 /build-appimage/
+/build-gst/
 
 /platforms/
 

@@ -29,10 +29,10 @@ MobileSource::MobileSource(const QString &device_identifier,
               m_device_description(device_description),
               m_is_scanning(false),
               m_is_initialized(false),
-                            m_live_preview_active(false),
-                            m_preview_timer(nullptr),
-                                                        m_backend_url(),
-                            m_session_id()
+              m_live_preview_active(false),
+              m_preview_timer(0),
+              m_backend_url(),
+              m_session_id()
 {
     //Mobile/phone input is not implemented yet
     //Keep capabilities conservative so UI/logic doesn't assume support

@@ -10,6 +10,9 @@ RUN dnf install -y \
     qpdf-devel \
     libtiff \
     libtiff-devel \
+    opencv-core \
+    opencv-imgproc \
+    opencv-devel \
     gstreamer1-devel \
     gstreamer1-plugins-base-devel \
     gstreamer1-plugins-base \
@@ -21,12 +24,6 @@ RUN dnf install -y \
     fuse \
     fuse-libs \
     && dnf clean all
-
-# Optional: Install OpenCV (only core and imgproc, not full suite)
-# RUN dnf install -y \
-#     opencv-core \
-#     opencv-devel \
-#     && dnf clean all
 
 # Download appimagetool and extract it (because FUSE)
 RUN cd /tmp && \

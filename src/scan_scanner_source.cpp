@@ -30,6 +30,9 @@
 extern QList<ScanDeviceInfo>
 enumerateDevices_SANE();
 
+extern bool
+enumerateDevices_SANE(QList<ScanDeviceInfo> &devices);
+
 extern std::unique_ptr<ScannerBackend>
 createScannerBackend_SANE();
 
@@ -72,7 +75,17 @@ ScannerSource::~ScannerSource()
 QList<ScanDeviceInfo>
 ScannerSource::enumerateDevices()
 {
-    return enumerateDevices_SANE();
+    //Collect devices via failure-aware overload
+    QList<ScanDeviceInfo> devices;
+    enumerateDevices(devices);
+    return devices;
+}
+
+bool
+ScannerSource::enumerateDevices(QList<ScanDeviceInfo> &devices)
+{
+    //Delegate to SANE backend enumeration
+    return enumerateDevices_SANE(devices);
 }
 
 ScanCapabilities

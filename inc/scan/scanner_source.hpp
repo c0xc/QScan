@@ -41,6 +41,9 @@ public:
     static QList<ScanDeviceInfo>
     enumerateDevices();
 
+    static bool
+    enumerateDevices(QList<ScanDeviceInfo> &devices);
+
     ScannerSource(const QString &device_name,
                  const QString &device_desc,
                  QObject *parent = 0);

@@ -31,12 +31,14 @@
 //Forward declarations for platform-specific implementations
 #ifdef USE_GSTREAMER
 extern QList<ScanDeviceInfo> enumerateDevices_GStreamer();
+extern bool enumerateDevices_GStreamer(QList<ScanDeviceInfo> &devices);
 extern std::unique_ptr<WebcamBackend> createWebcamBackend_GStreamer();
 //Backend implementation is in scan_webcam_source_gstreamer.cpp
 #endif
 
 #ifdef USE_QTCAMERA
 extern QList<ScanDeviceInfo> enumerateDevices_QtCamera();
+extern bool enumerateDevices_QtCamera(QList<ScanDeviceInfo> &devices);
 extern std::unique_ptr<WebcamBackend> createWebcamBackend_QtCamera();
 //Backend implementation is in scan_webcam_source_qtcamera.cpp
 #endif
@@ -51,7 +53,8 @@ WebcamSource::WebcamSource(const QString &device_identifier,
               m_is_initialized(false),
               m_live_preview_active(false),
               m_preview_timer(0),
-              m_frame_fail_count(0)
+              m_frame_fail_count(0),
+              m_preview_restart_attempted(false)
 {
     m_capabilities.preview_mode = PreviewMode::LiveStream;
     m_capabilities.supports_multi_page = false;
@@ -85,19 +88,30 @@ WebcamSource::~WebcamSource()
 QList<ScanDeviceInfo>
 WebcamSource::enumerateDevices()
 {
+    //Collect devices via failure-aware overload
+    QList<ScanDeviceInfo> devices;
+    enumerateDevices(devices);
+    return devices;
+}
+
+bool
+WebcamSource::enumerateDevices(QList<ScanDeviceInfo> &devices)
+{
+    //Use active webcam backend with explicit success status
 #ifdef USE_GSTREAMER
     Debug(QS("Enumerating webcam devices using backend=GStreamer"));
-    QList<ScanDeviceInfo> devices = enumerateDevices_GStreamer();
-    Debug(QS("Webcam enumeration (GStreamer) returned %lld device(s)", static_cast<long long>(devices.size())));
-    return devices;
+    bool success = enumerateDevices_GStreamer(devices);
+    Debug(QS("Webcam enumeration (GStreamer) returned %lld device(s), success=%d", static_cast<long long>(devices.size()), success ? 1 : 0));
+    return success;
 #elif defined(USE_QTCAMERA)
     Debug(QS("Enumerating webcam devices using backend=QtCamera"));
-    QList<ScanDeviceInfo> devices = enumerateDevices_QtCamera();
-    Debug(QS("Webcam enumeration (QtCamera) returned %lld device(s)", static_cast<long long>(devices.size())));
-    return devices;
+    bool success = enumerateDevices_QtCamera(devices);
+    Debug(QS("Webcam enumeration (QtCamera) returned %lld device(s), success=%d", static_cast<long long>(devices.size()), success ? 1 : 0));
+    return success;
 #else
     Debug(QS("Webcam enumeration: no backend compiled in"));
-    return QList<ScanDeviceInfo>();
+    devices.clear();
+    return false;
 #endif
 }
 
@@ -241,6 +255,8 @@ WebcamSource::captureFrame()
 bool
 WebcamSource::startPreview()
 {
+    static const int kPreviewWarmupMs = 2500;
+
     if (!m_is_initialized)
     {
         Debug(QS("startPreview: not initialized"));
@@ -255,6 +271,9 @@ WebcamSource::startPreview()
 
     Debug(QS("Starting live preview stream"));
     m_frame_fail_count = 0;
+    m_preview_start_time.start();
+    m_preview_fail_start_time.invalidate();
+    m_preview_restart_attempted = false;
 
     if (!m_backend->startPreview())
         return false;
@@ -294,6 +313,9 @@ WebcamSource::isOpen() const
 void
 WebcamSource::onPreviewTimer()
 {
+    static const int kPreviewWarmupMs = 2500;
+    static const int kPreviewFailTimeoutMs = 1500;
+
     if (!m_live_preview_active)
         return;
 
@@ -301,17 +323,48 @@ WebcamSource::onPreviewTimer()
     if (!frame.isNull())
     {
         m_frame_fail_count = 0;
+        m_preview_fail_start_time.invalidate();
         emit previewFrameReady(frame);
     }
     else
     {
+        //Allow backend startup time before counting failures
+        //QtCamera/GStreamer may need a short warmup before first frame arrives
+        if (m_preview_start_time.isValid() && m_preview_start_time.elapsed() < kPreviewWarmupMs)
+            return;
+
+        if (!m_preview_fail_start_time.isValid())
+            m_preview_fail_start_time.start();
+
         m_frame_fail_count++;
-        //Stop preview after 10 consecutive failures (~330ms at 33ms interval)
-        if (m_frame_fail_count >= 10)
+        //Stop preview only if repeated polls failed for long enough after warmup
+        //This avoids false failures when frame delivery is briefly delayed
+        if (m_frame_fail_count >= 10 && m_preview_fail_start_time.elapsed() >= kPreviewFailTimeoutMs)
         {
-            Debug(QS("Too many consecutive frame capture failures (%d), stopping preview", m_frame_fail_count));
+            //One automatic restart can recover some webcams that report active=1 before frames flow
+            if (!m_preview_restart_attempted && m_backend)
+            {
+                m_preview_restart_attempted = true;
+                Debug(QS("No frames after startup (%d polls over %lldms), retrying preview start once",
+                         m_frame_fail_count,
+                         static_cast<long long>(m_preview_fail_start_time.elapsed())));
+
+                m_backend->stopPreview();
+                m_frame_fail_count = 0;
+                m_preview_start_time.start();
+                m_preview_fail_start_time.invalidate();
+
+                if (m_backend->startPreview())
+                    return;
+
+                Debug(QS("Preview restart attempt failed to start backend"));
+            }
+
+            Debug(QS("Too many consecutive frame capture failures (%d over %lldms), stopping preview",
+                     m_frame_fail_count,
+                     static_cast<long long>(m_preview_fail_start_time.elapsed())));
             stopPreview();
-            emit scanError(tr("Failed to capture frames from camera. The device may be in use by another application."));
+            emit scanError(tr("Failed to capture frames from camera."));
         }
     }
 }

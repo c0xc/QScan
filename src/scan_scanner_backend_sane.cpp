@@ -1606,15 +1606,142 @@ createScannerBackend_SANE()
     return std::unique_ptr<ScannerBackend>(new SaneScannerBackend());
 }
 
+bool
+enumerateDevices_SANE(QList<ScanDeviceInfo> &devices);
+
 QList<ScanDeviceInfo>
 enumerateDevices_SANE()
 {
+    //Collect devices via failure-aware overload
     QList<ScanDeviceInfo> devices;
+    enumerateDevices_SANE(devices);
+    return devices;
+}
 
+static bool
+probeSaneBackendsDlopen()
+{
+    //Probe common SANE backends to detect lib symbol mismatches in AppImage mode
+    //Returns true if at least one backend loads successfully
+    //
+    //Why this check exists: SANE hides backend dlopen failures
+    //When libsane-hpaio.so fails to load (e.g. wrong libcrypto version), SANE does not
+    //report an error - it silently skips the backend and returns 0 devices with SUCCESS.
+    //This makes it impossible to distinguish "no hardware" from "backend lib mismatch".
+    //
+    //Original error this detects (AppImage bundling conflicting libs):
+    //"SANE host setup: dlopen backend <hpaio>: FAILED: /tmp/.mount_QScan-*/usr/lib/libcrypto.so.3: version `OPENSSL_3.3.0' not found (required by /lib64/libssl.so.3)"
+    //
+    //Root cause: If jpeg/openssl/tiff libs are bundled in AppImage, host SANE backends
+    //loaded via dlopen() bind against AppImage libs first (via LD_LIBRARY_PATH),
+    //then fail with unresolved versioned symbols:
+    //- libsane-hpaio.so: OPENSSL_3.3.0 not found via AppImage libcrypto/libssl
+    //- libsane-airscan.so: LIBJPEG_6.2 symbol mismatch via libtiff/libjpeg chain
+
+    const QStringList probe_backends = {QStringLiteral("hpaio"), QStringLiteral("airscan")};
+    const QStringList backend_dirs =
+    {
+        QStringLiteral("/usr/lib/sane"),
+        QStringLiteral("/usr/lib64/sane"),
+    };
+
+    int probed = 0;
+    int loadable = 0;
+
+    for (const QString &backend_name : probe_backends)
+    {
+        const QString backend_lib = QStringLiteral("libsane-") + backend_name + QStringLiteral(".so");
+        QString found_path;
+
+        for (const QString &dir_path : backend_dirs)
+        {
+            const QDir d(dir_path);
+            if (!d.exists())
+                continue;
+
+            const QStringList matches = d.entryList(QStringList() << (backend_lib + QStringLiteral("*")), QDir::Files);
+            if (!matches.isEmpty())
+            {
+                found_path = d.filePath(matches[0]);
+                break;
+            }
+        }
+
+        if (found_path.isEmpty())
+            continue;
+
+        probed++;
+        dlerror();
+        void *h = dlopen(found_path.toLocal8Bit().constData(), RTLD_NOW | RTLD_LOCAL);
+        if (h)
+        {
+            loadable++;
+            Debug(QS("SANE dlopen probe: <%s> OK", CSTR(found_path)));
+            dlclose(h);
+            break;
+        }
+        else
+        {
+            const char *err = dlerror();
+            Debug(QS("SANE dlopen probe: <%s> FAILED: %s", CSTR(found_path), err ? err : "unknown"));
+        }
+    }
+
+    if (probed > 0 && loadable == 0)
+    {
+        Debug(QS("SANE dlopen probe: %d backend(s) probed, none loadable", probed));
+        return false;
+    }
+
+    if (probed > 0)
+        Debug(QS("SANE dlopen probe: OK (%d/%d loadable)", loadable, probed));
+
+    return true;
+}
+
+static bool
+convertSaneDevicesToList(const SANE_Device **device_list, QList<ScanDeviceInfo> &devices)
+{
+    //Convert SANE device array to QList
+    int count = 0;
+    while (device_list[count])
+        ++count;
+
+    Debug(QS("sane_get_devices(): %d device(s)", count));
+
+    for (int i = 0; device_list[i]; ++i)
+    {
+        const SANE_Device *dev = device_list[i];
+        QString name = QString::fromLatin1(dev->name);
+        QString desc = QString::fromLatin1(dev->model);
+        if (!desc.isEmpty() && dev->vendor && dev->vendor[0])
+            desc = QString::fromLatin1(dev->vendor) + " " + desc;
+
+        Debug(QS("SANE device [%d]: name=<%s> vendor=<%s> model=<%s> type=<%s>",
+                 i,
+                 dev->name ? dev->name : "",
+                 dev->vendor ? dev->vendor : "",
+                 dev->model ? dev->model : "",
+                 dev->type ? dev->type : ""));
+
+        devices.append(ScanDeviceInfo(name, desc, ScanDeviceType::SCANNER));
+    }
+
+    return true;
+}
+
+bool
+enumerateDevices_SANE(QList<ScanDeviceInfo> &devices)
+{
+    //Reset output container
+    devices.clear();
+
+    //Log basic SANE env context
     const QByteArray sane_config_dir = qgetenv("SANE_CONFIG_DIR");
     if (!sane_config_dir.isEmpty())
         Debug(QS("SANE_CONFIG_DIR=<%s>", sane_config_dir.constData()));
 
+    //Enter shared SANE init scope
     struct SaneRefGuard
     {
         bool ok;
@@ -1645,56 +1772,64 @@ enumerateDevices_SANE()
         }
     } guard;
 
+    //Abort when SANE init scope failed
     if (!guard.ok)
     {
         Debug(QS("SANE enumeration aborted: sane_init() failed; returning 0 devices"));
-        return devices;
+        return false;
     }
 
-    //Log only cheap host setup diagnostics (no probing)
+    //Log host diagnostics without probing
     logSaneHostSetupForDebug();
 
+    //Query device list from SANE backend
     const SANE_Device **device_list = 0;
     SANE_Status status = sane_get_devices(&device_list, SANE_FALSE);
 
+    //Fail on backend query errors
     if (status != SANE_STATUS_GOOD)
     {
         Debug(QS("SANE enumeration FAILED: sane_get_devices() failed: %d (%s); device count unknown", status, sane_strstatus(status)));
-        return devices;
+        return false;
     }
 
+    //Fail on invalid backend response
     if (!device_list)
     {
         Debug(QS("sane_get_devices() returned GOOD but device_list is null"));
-        return devices;
+        return false;
     }
 
-    if (status == SANE_STATUS_GOOD && device_list)
+    //Check device count
+    int count = 0;
+    while (device_list[count])
+        ++count;
+
+    Debug(QS("sane_get_devices(): %d device(s)", count));
+
+    //When 0 devices returned in AppImage mode, run dlopen probe to detect lib mismatch
+    //SANE returns SUCCESS with 0 devices when backends fail to load - this distinguishes
+    //that failure mode from "no hardware present"
+    if (count == 0)
     {
-        int count = 0;
-        while (device_list[count])
-            ++count;
-        Debug(QS("sane_get_devices(): %d device(s)", count));
-        if (count == 0)
-            Debug(QS("SANE enumeration OK: sane_get_devices() returned 0 devices"));
-
-        for (int i = 0; device_list[i]; ++i)
+        const QString appdir = QString::fromLocal8Bit(qgetenv("APPDIR"));
+        if (!appdir.isEmpty())
         {
-            const SANE_Device *dev = device_list[i];
-            QString name = QString::fromLatin1(dev->name);
-            QString desc = QString::fromLatin1(dev->model);
-            if (!desc.isEmpty() && dev->vendor && dev->vendor[0])
-                desc = QString::fromLatin1(dev->vendor) + " " + desc;
+            Debug(QS("SANE enumeration: 0 devices in AppImage mode, running backend dlopen probe"));
 
-            Debug(QS("SANE device [%d]: name=<%s> vendor=<%s> model=<%s> type=<%s>",
-                     i,
-                     dev->name ? dev->name : "",
-                     dev->vendor ? dev->vendor : "",
-                     dev->model ? dev->model : "",
-                     dev->type ? dev->type : ""));
-
-            devices.append(ScanDeviceInfo(name, desc, ScanDeviceType::SCANNER));
+            if (!probeSaneBackendsDlopen())
+            {
+                Debug(QS("SANE enumeration failed: backend dlopen probe failed (lib mismatch likely)"));
+                return false;
+            }
         }
+
+        Debug(QS("SANE enumeration OK: sane_get_devices() returned 0 devices"));
     }
-    return devices;
+
+    //Convert SANE devices to output list
+    if (!convertSaneDevicesToList(device_list, devices))
+        return false;
+
+    return true;
 }

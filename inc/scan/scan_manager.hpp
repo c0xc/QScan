@@ -23,6 +23,8 @@
 
 #include <QObject>
 #include <QList>
+#include <QByteArray>
+#include <QtGlobal>
 
 #include "scan/scan_device_info.hpp"
 #include "scan/scan_source.hpp"
@@ -57,13 +59,23 @@ public:
 
 private:
 
+    static constexpr qint64 kDeviceCacheTtlMs = 10LL * 60LL * 1000LL; //10min timeout for cached device list
+
+    static QString
+    esclSuggestedLabelFromScannerCapabilitiesXml(const QByteArray &caps);
+
     QList<ScanDeviceInfo> m_devices;
+    bool m_device_cache_valid;
+    qint64 m_devices_cached_at_ms;
 
     void
     enumerateScanners();
 
     void
     enumerateCameras();
+
+    bool
+    enumerateCameras(QList<ScanDeviceInfo> &devices);
 
 };
 

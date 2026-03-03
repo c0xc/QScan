@@ -28,6 +28,24 @@ if [ -f "$BUILD_DIR/CMakeCache.txt" ]; then
     fi
 fi
 
+# AppImage runtime media backend policy
+# Default to FFmpeg inside AppImage because this is the backend that is stable
+# in the non-AppImage Qt6 build and avoids the observed webcam freeze path seen
+# with Qt Multimedia + GStreamer inside the AppImage.
+# Set QSCAN_APPIMAGE_PREFER_FFMPEG=0 to disable this preference.
+QSCAN_APPIMAGE_PREFER_FFMPEG="${QSCAN_APPIMAGE_PREFER_FFMPEG:-1}"
+
+# Qt Multimedia plugin policy depends on webcam backend mode:
+# - QtCamera mode (QSCAN_ENABLE_GSTREAMER=OFF): default skip Qt GStreamer multimedia
+#   plugin because AppImage webcam freeze was observed on that path
+# - GStreamer backend mode (QSCAN_ENABLE_GSTREAMER=ON): default include it
+# Override explicitly with QSCAN_APPIMAGE_INCLUDE_GSTREAMER_PLUGIN=0/1.
+QSCAN_APPIMAGE_INCLUDE_GSTREAMER_PLUGIN_DEFAULT=1
+if [ "$QSCAN_BUNDLE_GSTREAMER" -eq 0 ]; then
+    QSCAN_APPIMAGE_INCLUDE_GSTREAMER_PLUGIN_DEFAULT=0
+fi
+QSCAN_APPIMAGE_INCLUDE_GSTREAMER_PLUGIN="${QSCAN_APPIMAGE_INCLUDE_GSTREAMER_PLUGIN:-$QSCAN_APPIMAGE_INCLUDE_GSTREAMER_PLUGIN_DEFAULT}"
+
 echo "Creating AppImage for QScan..."
 echo "Project directory: $PROJECT_DIR"
 echo "Build directory: $BUILD_DIR"
@@ -54,94 +72,105 @@ mkdir -p "$APPDIR/usr/share/icons/hicolor/256x256/apps"
 echo "Copying binary..."
 cp "$BINARY" "$APPDIR/usr/bin/"
 
+# Return 0 with a reason string when a library should stay host-side
+skip_reason_for_lib() {
+    local libname=$1
+
+    #Keep glibc/libstdc++/toolchain runtime on host
+    case "$libname" in
+        libc.so*|libm.so*|libdl.so*|libpthread.so*|librt.so*|libgcc_s.so*|libstdc++.so*|ld-linux*)
+            echo "core runtime"
+            return 0
+            ;;
+    esac
+
+    #Keep SANE host-side so distro/vendor backends match the host libs
+    case "$libname" in
+        libsane.so*|libsane-*.so*)
+            echo "host SANE/backend ABI coupling"
+            return 0
+            ;;
+    esac
+
+    #Do not bundle GL dispatch stack
+    #These are resolved through the host GPU driver stack; bundling leads to driver mismatch
+    case "$libname" in
+        libGLX.so*|libOpenGL.so*|libEGL.so*|libGLdispatch.so*)
+            echo "host GPU driver coupling"
+            return 0
+            ;;
+    esac
+
+    #Do not bundle OpenSSL/JPEG/TIFF
+    #If these are bundled, host SANE backends loaded with dlopen() can bind against
+    #the AppImage copy first (due to LD_LIBRARY_PATH), then fail with unresolved
+    #versioned symbols because backend and transitive host deps were built against a
+    #different distro toolchain set.
+    #Observed failures:
+    # - hpaio backend: OPENSSL_3.3.0 not found via AppImage libcrypto/libssl
+    # - airscan backend: LIBJPEG_6.2 symbol mismatch via libtiff/libjpeg chain
+    case "$libname" in
+        libcrypto.so*|libssl.so*|libjpeg.so*|libtiff.so*)
+            echo "host SANE openssl/jpeg/tiff ABI coupling"
+            return 0
+            ;;
+    esac
+
+    #Do not bundle PCRE2
+    #Host GLib may load it through LD_LIBRARY_PATH and then reject symbol/version info
+    case "$libname" in
+        libpcre2-8.so*)
+            echo "host GLib/PCRE2 ABI coupling"
+            return 0
+            ;;
+    esac
+
+    #When the build disables the in-app GStreamer backend, avoid bundling any gst/glib
+    #runtime set. Qt Multimedia then stays aligned with the host plugin stack instead
+    #of mixing host plugins with bundled core libs.
+    if [ "$QSCAN_BUNDLE_GSTREAMER" -eq 0 ]; then
+        case "$libname" in
+            libgst*.so*|libgstreamer-1.0.so*)
+                echo "host GStreamer consistency"
+                return 0
+                ;;
+            libglib-2.0.so*|libgobject-2.0.so*|libgio-2.0.so*|libgmodule-2.0.so*|libgthread-2.0.so* )
+                echo "host GLib consistency"
+                return 0
+                ;;
+        esac
+    fi
+
+    return 1
+}
+
 # Function to copy library and its dependencies recursively
 copy_deps() {
     local lib=$1
     local target_dir=$2
-    
-    # Skip if library doesn't exist
+    local libname reason dep depname
+
     if [ ! -f "$lib" ]; then
         return
     fi
-    
-    # Get the library name
-    local libname=$(basename "$lib")
 
-    # Do not bundle OpenGL/GLX driver-facing libraries. They are tightly coupled
-    # to the host GPU driver stack and bundling them often breaks GLX/EGL.
-    case "$libname" in
-        libGLX.so*|libOpenGL.so*|libEGL.so*|libGLdispatch.so*)
-            return
-            ;;
-    esac
-
-    # Do not bundle OpenSSL or core image codec libs.
-    # Host SANE backends are loaded at runtime and must bind against the host's
-    # libssl/libcrypto/libjpeg/libtiff stack. Bundling these libraries can
-    # pre-load incompatible versions and prevent backends like hpaio/airscan
-    # from loading.
-    # Example failures observed when these were bundled in the AppImage:
-    # SANE host setup: dlopen backend <hpaio>: FAILED: /tmp/.mount_QScan-*/usr/lib/libcrypto.so.3: version `OPENSSL_3.3.0' not found (required by /lib64/libssl.so.3)
-    # SANE host setup: dlopen backend <airscan>: FAILED: /lib64/libtiff.so.6: undefined symbol: jpeg12_read_raw_data, version LIBJPEG_6.2
-    case "$libname" in
-        libcrypto.so*|libssl.so*|libjpeg.so*|libtiff.so*)
-            return
-            ;;
-    esac
-
-    if [ "$QSCAN_BUNDLE_GSTREAMER" -eq 0 ]; then
-        case "$libname" in
-            libgst*.so*|libgstreamer-1.0.so* )
-                return
-                ;;
-            # If we are intentionally using host GStreamer (no-gst build), we must
-            # also use host GLib to avoid symbol/ABI mismatches.
-            libglib-2.0.so*|libgobject-2.0.so*|libgio-2.0.so*|libgmodule-2.0.so*|libgthread-2.0.so* )
-                return
-                ;;
-        esac
+    libname=$(basename "$lib")
+    if reason=$(skip_reason_for_lib "$libname"); then
+        return
     fi
-    
-    # Skip if already copied
+
     if [ -f "$target_dir/$libname" ]; then
         return
     fi
-    
-    # Copy the library
+
     cp "$lib" "$target_dir/"
-    
-    # Get dependencies using ldd
+
     ldd "$lib" 2>/dev/null | grep "=>" | awk '{print $3}' | while read -r dep; do
         if [ -n "$dep" ] && [ -f "$dep" ]; then
-            local depname=$(basename "$dep")
-            
-            # Skip system libraries that should be present on all systems
-            case "$depname" in
-                libc.so*|libm.so*|libdl.so*|libpthread.so*|librt.so*|libgcc_s.so*|libstdc++.so*)
-                    continue
-                    ;;
-            esac
-            
-            # Skip ld-linux
-            if [[ "$depname" == ld-linux* ]]; then
+            depname=$(basename "$dep")
+            if reason=$(skip_reason_for_lib "$depname"); then
                 continue
             fi
-
-            # Prefer using host SANE to match the host's installed backends/config
-            case "$depname" in
-                libsane.so*|libsane-*.so*)
-                    continue
-                    ;;
-            esac
-
-            # Same rationale as above: keep OpenSSL and core image codec libs host-side
-            case "$depname" in
-                libcrypto.so*|libssl.so*|libjpeg.so*|libtiff.so*)
-                    continue
-                    ;;
-            esac
-            
-            # Recursively copy dependencies
             copy_deps "$dep" "$target_dir"
         fi
     done
@@ -151,6 +180,7 @@ copy_deps() {
 copy_deps_only() {
     local file=$1
     local target_dir=$2
+    local dep depname reason
 
     if [ ! -f "$file" ]; then
         return
@@ -158,36 +188,9 @@ copy_deps_only() {
 
     ldd "$file" 2>/dev/null | grep "=>" | awk '{print $3}' | while read -r dep; do
         if [ -n "$dep" ] && [ -f "$dep" ]; then
-            local depname=$(basename "$dep")
-            case "$depname" in
-                libc.so*|libm.so*|libdl.so*|libpthread.so*|librt.so*|libgcc_s.so*|libstdc++.so*)
-                    continue
-                    ;;
-            esac
-            if [[ "$depname" == ld-linux* ]]; then
+            depname=$(basename "$dep")
+            if reason=$(skip_reason_for_lib "$depname"); then
                 continue
-            fi
-
-            case "$depname" in
-                libGLX.so*|libOpenGL.so*|libEGL.so*|libGLdispatch.so*)
-                    continue
-                    ;;
-            esac
-
-            case "$depname" in
-                libcrypto.so*|libssl.so*|libjpeg.so*|libtiff.so*)
-                    continue
-                    ;;
-            esac
-            if [ "$QSCAN_BUNDLE_GSTREAMER" -eq 0 ]; then
-                case "$depname" in
-                    libgst*.so*|libgstreamer-1.0.so* )
-                        continue
-                        ;;
-                    libglib-2.0.so*|libgobject-2.0.so*|libgio-2.0.so*|libgmodule-2.0.so*|libgthread-2.0.so* )
-                        continue
-                        ;;
-                esac
             fi
             copy_deps "$dep" "$target_dir"
         fi
@@ -201,68 +204,35 @@ echo "  - Analyzing binary dependencies..."
 ldd "$BINARY" | grep "=>" | awk '{print $3}' | while read -r lib; do
     if [ -n "$lib" ] && [ -f "$lib" ]; then
         libname=$(basename "$lib")
-        
-        # Skip basic system libraries
-        case "$libname" in
-            libc.so*|libm.so*|libdl.so*|libpthread.so*|librt.so*|libgcc_s.so*)
-                echo "    Skipping system library: $libname"
-                continue
-                ;;
-        esac
-
-        # Prefer using host SANE to match the host's installed backends/config.
-        # Bundling libsane can cause ABI mismatches with distro/vendor backends.
-        case "$libname" in
-            libsane.so*|libsane-*.so*)
-                echo "    Skipping SANE library (use host): $libname"
-                continue
-                ;;
-        esac
-
-        # If the build disabled our GStreamer webcam backend, Qt Multimedia will still
-        # typically use the host's GStreamer plugin on Linux. In that case we must
-        # avoid bundling GLib, otherwise host GStreamer may bind against our bundled
-        # GLib and crash/abort due to symbol mismatches.
-        if [ "$QSCAN_BUNDLE_GSTREAMER" -eq 0 ]; then
-            case "$libname" in
-                libglib-2.0.so*|libgobject-2.0.so*|libgio-2.0.so*|libgmodule-2.0.so*|libgthread-2.0.so* )
-                    echo "    Skipping GLib library (use host): $libname"
-                    continue
-                    ;;
-            esac
-        fi
-        
-        # Skip ld-linux
-        if [[ "$libname" == ld-linux* ]]; then
-            echo "    Skipping dynamic linker: $libname"
+        if reason=$(skip_reason_for_lib "$libname"); then
+            echo "    Skipping ($reason): $libname"
             continue
         fi
-
-        # Do not bundle OpenGL/GLX driver-facing libraries. Use host.
-        case "$libname" in
-            libGLX.so*|libOpenGL.so*|libEGL.so*|libGLdispatch.so*)
-                echo "    Skipping OpenGL library (use host): $libname"
-                continue
-                ;;
-        esac
-
-        # Avoid bundling OpenSSL and core image codec libs to prevent runtime
-        # conflicts with host-loaded SANE backends.
-        case "$libname" in
-            libcrypto.so*|libssl.so*|libjpeg.so*|libtiff.so*)
-                echo "    Skipping library (use host): $libname"
-                continue
-                ;;
-        esac
         
         echo "    Bundling: $libname"
         copy_deps "$lib" "$APPDIR/usr/lib"
     fi
 done
 
+# Bundle fonts if present
+# Some Qt builds rely on a Qt-internal font directory and do not use fontconfig
+echo "  - Bundling fonts (if available)..."
+mkdir -p "$APPDIR/usr/lib/fonts"
+FONT_CANDIDATES=(
+    "$PROJECT_DIR/resources/Roboto-Regular.ttf"
+    "$PROJECT_DIR/resources/Inconsolata.ttf"
+)
+for font in "${FONT_CANDIDATES[@]}"; do
+    if [ -f "$font" ]; then
+        cp -f "$font" "$APPDIR/usr/lib/fonts/"
+    fi
+done
+
 # Check if OpenCV is linked (only bundle if actually used)
 if ldd "$BINARY" | grep -q "libopencv"; then
     echo "  - OpenCV detected, bundling OpenCV modules..."
+    # NOTE: This currently grabs most libopencv_* modules from the image
+    # If OpenCV usage/modules change, consider restricting this to the actually needed libs
     for opencv_lib in /usr/lib64/libopencv_*.so* /usr/lib/x86_64-linux-gnu/libopencv_*.so*; do
         if [ -f "$opencv_lib" ]; then
             libname=$(basename "$opencv_lib")
@@ -288,7 +258,22 @@ for qt_path in $QT_PLUGIN_PATHS; do
         cp -r "$qt_path/imageformats" "$APPDIR/usr/plugins/" 2>/dev/null || true
         cp -r "$qt_path/iconengines" "$APPDIR/usr/plugins/" 2>/dev/null || true
         cp -r "$qt_path/xcbglintegrations" "$APPDIR/usr/plugins/" 2>/dev/null || true
-        cp -r "$qt_path/multimedia" "$APPDIR/usr/plugins/" 2>/dev/null || true
+        
+        # Bundle Qt Multimedia plugins
+        # In QtCamera mode (QSCAN_ENABLE_GSTREAMER=OFF), keep FFmpeg preferred and
+        # skip Qt GStreamer multimedia plugin by default to avoid the freeze path.
+        # In GStreamer backend mode, keep the Qt GStreamer plugin by default.
+        mkdir -p "$APPDIR/usr/plugins/multimedia"
+        if [ -f "$qt_path/multimedia/libffmpegmediaplugin.so" ]; then
+            echo "    Bundling FFmpeg multimedia plugin (preferred)"
+            cp "$qt_path/multimedia/libffmpegmediaplugin.so" "$APPDIR/usr/plugins/multimedia/" 2>/dev/null || true
+        fi
+        if [ "$QSCAN_APPIMAGE_INCLUDE_GSTREAMER_PLUGIN" = "1" ] && [ -f "$qt_path/multimedia/libgstreamermediaplugin.so" ]; then
+            echo "    Bundling GStreamer multimedia plugin (debug opt-in)"
+            cp "$qt_path/multimedia/libgstreamermediaplugin.so" "$APPDIR/usr/plugins/multimedia/" 2>/dev/null || true
+        elif [ -f "$qt_path/multimedia/libgstreamermediaplugin.so" ]; then
+            echo "    Skipping GStreamer multimedia plugin (QtCamera mode freeze guard)"
+        fi
         
         # Bundle dependencies of Qt plugins by analyzing original plugin files
         # This matters for plugins loaded via dlopen() (not visible in the main binary's ldd)
@@ -303,35 +288,9 @@ for qt_path in $QT_PLUGIN_PATHS; do
                 ldd "$plugin_src" 2>/dev/null | grep "=>" | awk '{print $3}' | while read -r dep; do
                     if [ -n "$dep" ] && [ -f "$dep" ]; then
                         depname=$(basename "$dep")
-                        # Skip basic system libraries
-                        case "$depname" in
-                            libc.so*|libm.so*|libdl.so*|libpthread.so*|librt.so*|libgcc_s.so*)
-                                continue ;;
-                        esac
-                        if [[ "$depname" == ld-linux* ]]; then
+                        if reason=$(skip_reason_for_lib "$depname"); then
                             continue
                         fi
-
-                        if [ "$QSCAN_BUNDLE_GSTREAMER" -eq 0 ]; then
-                            case "$depname" in
-                                libglib-2.0.so*|libgobject-2.0.so*|libgio-2.0.so*|libgmodule-2.0.so*|libgthread-2.0.so* )
-                                    continue
-                                    ;;
-                            esac
-                        fi
-
-                        case "$depname" in
-                            libGLX.so*|libOpenGL.so*|libEGL.so*|libGLdispatch.so*)
-                                continue
-                                ;;
-                        esac
-
-                        # Keep OpenSSL/JPEG/TIFF host-side to avoid breaking host SANE backends
-                        case "$depname" in
-                            libcrypto.so*|libssl.so*|libjpeg.so*|libtiff.so*)
-                                continue
-                                ;;
-                        esac
                         # Bundle if not already present
                         if [ ! -f "$APPDIR/usr/lib/$depname" ]; then
                             echo "      Bundling plugin dep: $depname"
@@ -348,32 +307,9 @@ for qt_path in $QT_PLUGIN_PATHS; do
                     ldd "$plugin_src" 2>/dev/null | grep "=>" | awk '{print $3}' | while read -r dep; do
                         if [ -n "$dep" ] && [ -f "$dep" ]; then
                             depname=$(basename "$dep")
-                            # Skip basic system libraries
-                            case "$depname" in
-                                libc.so*|libm.so*|libdl.so*|libpthread.so*|librt.so*|libgcc_s.so*)
-                                    continue ;;
-                            esac
-                            if [[ "$depname" == ld-linux* ]]; then
+                            if reason=$(skip_reason_for_lib "$depname"); then
                                 continue
                             fi
-
-                            if [ "$QSCAN_BUNDLE_GSTREAMER" -eq 0 ]; then
-                                case "$depname" in
-                                    libgst*.so*|libgstreamer-1.0.so* )
-                                        continue
-                                        ;;
-                                    libglib-2.0.so*|libgobject-2.0.so*|libgio-2.0.so*|libgmodule-2.0.so*|libgthread-2.0.so* )
-                                        continue
-                                        ;;
-                                esac
-                            fi
-
-                            # Keep OpenSSL/JPEG/TIFF host-side to avoid breaking host SANE backends
-                            case "$depname" in
-                                libcrypto.so*|libssl.so*|libjpeg.so*|libtiff.so*)
-                                    continue
-                                    ;;
-                            esac
                             # Bundle if not already present
                             if [ ! -f "$APPDIR/usr/lib/$depname" ]; then
                                 echo "      Bundling plugin dep: $depname"
@@ -388,11 +324,36 @@ for qt_path in $QT_PLUGIN_PATHS; do
     fi
 done
 
-# Hard fail-safe: do not ship OpenSSL/JPEG/TIFF into AppImage
-# TODO this is supposed to "fix" SANE support but breaks the AppImage (e.g., in Ubuntu in distrobox)
-# Why Distrobox? Because some manufacturers only provide a deb package with their drivers
-# and on a RedHat-based distro, Distrobox is a simple workaround (which also allows GUI programs like this one to run) 
+# Hard fail-safe: remove libs that must stay host-side for SANE/backend compatibility.
+# This is intentionally redundant with skip rules above because future edits can add
+# new copy paths. If these files remain in AppDir, runtime failures are subtle:
+# scanner backend dlopen() fails, scanner list can become empty, and users may not
+# get a clear UI error about the true ABI mismatch root cause.
 rm -f "$APPDIR/usr/lib/libcrypto.so"* "$APPDIR/usr/lib/libssl.so"* "$APPDIR/usr/lib/libjpeg.so"* "$APPDIR/usr/lib/libtiff.so"* 2>/dev/null || true
+
+# Hard fail-safe: remove libpcre2 to avoid host GLib version/symbol conflict
+rm -f "$APPDIR/usr/lib/libpcre2-8.so"* 2>/dev/null || true
+
+# Bundle the basic font stack explicitly
+# Qt may dlopen() fontconfig at runtime, so it might not show up in ldd output
+# If we ship some low-level deps (e.g. libexpat/libz) but rely on host fontconfig,
+# mismatches can result in "tofu" rectangles instead of text
+echo "  - Bundling font stack (fontconfig/freetype/harfbuzz)..."
+FONT_LIB_CANDIDATES=(
+    /usr/lib64/libfontconfig.so*
+    /usr/lib/x86_64-linux-gnu/libfontconfig.so*
+    /usr/lib64/libfreetype.so*
+    /usr/lib/x86_64-linux-gnu/libfreetype.so*
+    /usr/lib64/libharfbuzz.so*
+    /usr/lib/x86_64-linux-gnu/libharfbuzz.so*
+)
+for font_lib in "${FONT_LIB_CANDIDATES[@]}"; do
+    for candidate in $font_lib; do
+        if [ -f "$candidate" ]; then
+            copy_deps "$candidate" "$APPDIR/usr/lib"
+        fi
+    done
+done
 
 
 if [ "$QSCAN_BUNDLE_GSTREAMER" -eq 1 ]; then
@@ -400,8 +361,18 @@ if [ "$QSCAN_BUNDLE_GSTREAMER" -eq 1 ]; then
     # Keep minimal to avoid shipping codecs
     echo "  - Looking for GStreamer plugins..."
     GST_PLUGIN_DIRS="/usr/lib64/gstreamer-1.0 /usr/lib/x86_64-linux-gnu/gstreamer-1.0 /usr/lib/gstreamer-1.0"
-    # Needed for v4l2src/appsink/videoconvert
-    GST_MIN_PLUGINS="libgstapp.so libgstvideoconvert.so libgstvideo4linux2.so"
+    # Minimal set of plugins for the webcam pipeline:
+    #   v4l2src ! videoconvert ! appsink
+    #
+    # Why bundle libgstvideoconvertscale.so for videoconvert:
+    # Some distros register the videoconvert element from the "videoconvertscale"
+    # plugin module (libgstvideoconvertscale.so), not from libgstvideoconvert.so.
+    # For example, in the Fedora build container, `gst-inspect-1.0 videoconvert`
+    # reports Plugin Name: videoconvertscale and Filename: libgstvideoconvertscale.so.
+    # If we only bundle libgstvideoconvert.so, the AppImage can fail at runtime with
+    # "no such element: videoconvert" even though our pipeline uses videoconvert
+    # explicitly. Bundling both keeps the set small while staying cross-distro.
+    GST_MIN_PLUGINS="libgstapp.so libgstvideoconvert.so libgstvideoconvertscale.so libgstvideo4linux2.so"
 
     for gst_dir in $GST_PLUGIN_DIRS; do
         if [ -d "$gst_dir" ]; then
@@ -492,12 +463,57 @@ export LD_LIBRARY_PATH="$APPDIR/usr/lib:${LD_LIBRARY_PATH}"
 # Set up Qt plugin path
 export QT_PLUGIN_PATH="$APPDIR/usr/plugins:${QT_PLUGIN_PATH}"
 
-# Avoid GLX initialization issues on some driver stacks when running from AppImage.
-export QT_XCB_GL_INTEGRATION=none
+# Make the bundled desktop entry discoverable for xdg-desktop-portal
+# Otherwise Qt may fail to register the app ID with the portal:
+# QDBusError("org.freedesktop.portal.Error.Failed", "Could not register app ID: App info not found for 'qscan'")
+if [ -z "${XDG_DATA_DIRS+x}" ]; then
+    export XDG_DATA_DIRS="$APPDIR/usr/share:/usr/local/share:/usr/share"
+else
+    export XDG_DATA_DIRS="$APPDIR/usr/share:$XDG_DATA_DIRS"
+fi
+
+# Keep native system fonts by default
+# If needed for troubleshooting/tofu, force using fonts bundled under $APPDIR/usr/lib/fonts
+if [ -z "${QT_QPA_FONTDIR+x}" ] && [ "${QSCAN_FORCE_BUNDLED_FONTS:-0}" = "1" ]; then
+    export QT_QPA_FONTDIR="$APPDIR/usr/lib/fonts"
+fi
+
+# DO NOT set QT_XCB_GL_INTEGRATION=none - we tried it and failed miserably.
+# Setting it to 'none' completely disables OpenGL/EGL integration, which breaks
+# Qt Multimedia's video frame conversion pipeline. Observed failures:
+# - "qt.multimedia.gstreamer: Using Qt multimedia with GStreamer version: ..."
+# - "QGstElement::getPipeline failed for element: videoConvert"
+# - "QRhi* ... No RHI backend. Using CPU conversion."
+# - Complete freeze when accessing webcam (DMA-BUF video buffer mapping deadlocks
+#   without GL context, blocking both GStreamer thread and main event loop)
+# The AppImage already excludes GL dispatch libs (libGLX/libEGL/libOpenGL) so the
+# host GPU driver stack is used. Let Qt auto-detect the best GL integration method.
 
 # Use host SANE configuration/backends (do not override SANE_CONFIG_DIR).
 export QSCAN_SANE_SANITIZE_LD_LIBRARY_PATH=1
 EOF
+
+if [ "$QSCAN_BUNDLE_GSTREAMER" -eq 0 ]; then
+    cat >> "$APPDIR/AppRun" << 'EOF'
+
+# QtCamera AppImage mode only: prefer FFmpeg backend to avoid the Qt Multimedia
+# GStreamer path that has frozen webcam startup in AppImage packaging.
+# Related runtime log lines during the freeze path include:
+# - "qt.multimedia.gstreamer: Using Qt multimedia with GStreamer version: ..."
+# - "QGstElement::getPipeline failed for element: videoConvert"
+# - "QRhi* ... No RHI backend. Using CPU conversion."
+# Do not apply this in GStreamer-backend builds, where GStreamer is intentional.
+if [ "${QSCAN_APPIMAGE_PREFER_FFMPEG:-1}" = "1" ] && [ -f "$APPDIR/usr/plugins/multimedia/libffmpegmediaplugin.so" ]; then
+    export QT_MEDIA_BACKEND=ffmpeg
+fi
+EOF
+else
+    cat >> "$APPDIR/AppRun" << 'EOF'
+
+# GStreamer-backend build mode: do not force QT_MEDIA_BACKEND.
+# Leave Qt backend selection untouched because this build intentionally uses GStreamer.
+EOF
+fi
 
 if [ "$QSCAN_BUNDLE_GSTREAMER" -eq 1 ]; then
     cat >> "$APPDIR/AppRun" << 'EOF'
@@ -515,6 +531,16 @@ cat >> "$APPDIR/AppRun" << 'EOF'
 
 # Disable Qt's automatic scaling detection
 export QT_AUTO_SCREEN_SCALE_FACTOR=0
+
+# Optional non-blocking runtime preflight
+# It helps classify library/plugin conflicts early without hard-failing launch
+if [ "${QSCAN_RUN_PREFLIGHT:-1}" = "1" ] && [ -z "${QSCAN_PREFLIGHT_RUNNING+x}" ]; then
+    export QSCAN_PREFLIGHT_RUNNING=1
+    PREFLIGHT_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/qscan"
+    mkdir -p "$PREFLIGHT_DIR"
+    "$APPDIR/usr/bin/qscan" --self-check --quick >> "$PREFLIGHT_DIR/preflight.log" 2>&1 || true
+    unset QSCAN_PREFLIGHT_RUNNING
+fi
 
 # Run the application
 exec "$APPDIR/usr/bin/qscan" "$@"

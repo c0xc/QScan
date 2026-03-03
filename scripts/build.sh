@@ -19,7 +19,7 @@ BUILD_IMAGE="qscan-fedora-36"
 CMAKE_FLAGS=(
     # -DQSCAN_ENABLE_GSTREAMER=ON
     -DQSCAN_ENABLE_QPDF=ON
-    # -DQSCAN_ENABLE_OPENCV=ON
+    -DQSCAN_ENABLE_OPENCV=ON
 )
 
 # Parse command line arguments

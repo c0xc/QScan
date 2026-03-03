@@ -37,10 +37,9 @@ SOURCES += \
     src/core_classlogger.cpp \
     src/core_settingsmanager.cpp \
     src/core_profilesettings.cpp \
-    src/processing_image_processor.cpp \
-    src/processing_crop_processor.cpp \
-    src/processing_rotate_processor.cpp \
-    src/processing_border_detector.cpp \
+    src/processing_scan_crop_detector.cpp \
+    src/processing_page_renderer.cpp \
+    src/processing_camera_crop_detector.cpp \
     src/scan_scanner_source.cpp \
     src/scan_scanner_backend_sane.cpp \
     src/scan_webcam_source.cpp \
@@ -75,10 +74,9 @@ HEADERS += \
     inc/document/scannedpage.hpp \
     inc/document/document.hpp \
     inc/document/documentexporter.hpp \
-    inc/processing/image_processor.hpp \
-    inc/processing/crop_processor.hpp \
-    inc/processing/rotate_processor.hpp \
-    inc/processing/border_detector.hpp \
+    inc/processing/scan_crop_detector.hpp \
+    inc/processing/page_renderer.hpp \
+    inc/processing/camera_crop_detector.hpp \
     inc/gui/scannerselector.hpp \
     inc/gui/mainwindow.hpp \
     inc/gui/scanpreviewwidget.hpp \

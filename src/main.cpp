@@ -20,13 +20,95 @@
 
 #include "main.hpp"
 
+#include <QTextStream>
 #include <QGuiApplication>
 #include <QIcon>
 #include <QStyle>
 
+#include "core/runtime_selfcheck.hpp"
+
+namespace
+{
+
+struct CliArgs
+{
+    bool show_help;
+    bool self_check;
+    bool self_check_full;
+    bool self_check_json;
+
+    CliArgs()
+        : show_help(false),
+          self_check(false),
+          self_check_full(false),
+          self_check_json(false)
+    {
+    }
+};
+
+static CliArgs
+parseCliArgs(int argc, char *argv[])
+{
+    CliArgs args;
+
+    for (int i = 1; i < argc; ++i)
+    {
+        const QString current = QString::fromLocal8Bit(argv[i]);
+
+        if (current == QStringLiteral("--help") || current == QStringLiteral("-h"))
+        {
+            args.show_help = true;
+            continue;
+        }
+
+        if (current == QStringLiteral("--self-check") || current == QStringLiteral("--self-check-quick") || current == QStringLiteral("--quick"))
+        {
+            args.self_check = true;
+            continue;
+        }
+
+        if (current == QStringLiteral("--self-check-full") || current == QStringLiteral("--full"))
+        {
+            args.self_check = true;
+            args.self_check_full = true;
+            continue;
+        }
+
+        if (current == QStringLiteral("--self-check-json") || current == QStringLiteral("--json"))
+        {
+            args.self_check = true;
+            args.self_check_json = true;
+            continue;
+        }
+    }
+
+    return args;
+}
+
+static void
+printCliHelp()
+{
+    QTextStream out(stdout);
+    out << "QScan\n";
+    out << "Usage:\n";
+    out << "  qscan                        Launch GUI\n";
+    out << "  qscan --self-check           Run quick runtime diagnostics\n";
+    out << "  qscan --self-check-full      Run extended runtime diagnostics\n";
+    out << "  qscan --self-check --json    Emit machine-readable JSON output\n";
+}
+
+} //namespace
+
 int
 main(int argc, char *argv[])
 {
+    const CliArgs cli_args = parseCliArgs(argc, argv);
+    if (cli_args.show_help)
+    {
+        printCliHelp();
+        return 0;
+    }
+
     //Initialize Qt Application
     QApplication app(argc, argv);
     app.setApplicationName(PROGRAM); //QScan
@@ -57,6 +139,18 @@ main(int argc, char *argv[])
 #if !defined(USE_GSTREAMER) && !defined(USE_QTCAMERA)
     Debug(QS("Webcam backend compiled in: none"));
 #endif
+
+    if (cli_args.self_check)
+    {
+        const qscan::RuntimeSelfCheckResult result = qscan::runRuntimeSelfCheck(cli_args.self_check_full);
+        QTextStream out(stdout);
+        if (cli_args.self_check_json)
+            out << qscan::runtimeSelfCheckToJson(result) << "\n";
+        else
+            out << qscan::runtimeSelfCheckToText(result) << "\n";
+        out.flush();
+        return qscan::runtimeSelfCheckExitCode(result);
+    }
 
     qRegisterMetaType<qscan::ScanPageInfo>("qscan::ScanPageInfo");
 

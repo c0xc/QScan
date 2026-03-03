@@ -369,15 +369,33 @@ createWebcamBackend_GStreamer()
     return std::unique_ptr<WebcamBackend>(new GStreamerWebcamBackend());
 }
 
-QList<ScanDeviceInfo>
-enumerateDevices_GStreamer()
+static void
+logGStreamerCameraPathCheck()
 {
-    QList<ScanDeviceInfo> devices;
-    
+    //Check runtime factories for diagnostics
+    //This is intentionally non-fatal and must not change enumeration outcome
+    GstElementFactory *v4l2src_factory = gst_element_factory_find("v4l2src");
+    GstElementFactory *appsink_factory = gst_element_factory_find("appsink");
+
+    Debug(QS("GStreamer runtime check: v4l2src=%s appsink=%s",
+             v4l2src_factory ? "FOUND" : "MISSING",
+             appsink_factory ? "FOUND" : "MISSING"));
+
+    if (v4l2src_factory)
+        gst_object_unref(v4l2src_factory);
+    if (appsink_factory)
+        gst_object_unref(appsink_factory);
+}
+
+bool
+enumerateDevices_GStreamer(QList<ScanDeviceInfo> &devices)
+{
+    //Reset output container
+    devices.clear();
+
     Debug(QS("Enumerating GStreamer video devices..."));
 
-    //Initialize GStreamer if not already done
-    //Enumeration can be called without any active backend instance
+    //Initialize GStreamer runtime
     if (!gst_is_initialized())
     {
         GError *error = 0;
@@ -386,17 +404,17 @@ enumerateDevices_GStreamer()
             Debug(QS("gst_init_check() FAILED: %s", error ? error->message : "unknown error"));
             if (error)
                 g_error_free(error);
-            return devices;
+            return false;
         }
         Debug(QS("GStreamer initialized successfully"));
     }
 
-    //Device monitor setup
+    //Create device monitor
     GstDeviceMonitor *monitor = gst_device_monitor_new();
     if (!monitor)
     {
         Debug(QS("Failed to create GstDeviceMonitor"));
-        return devices;
+        return false;
     }
 
     //Filter for video sources
@@ -404,8 +422,7 @@ enumerateDevices_GStreamer()
     gst_device_monitor_add_filter(monitor, "Video/Source", caps);
     gst_caps_unref(caps);
 
-    //Start monitor
-    //On failure, dump env vars that affect plugin discovery
+    //Start monitor and collect diagnostics on failure
     if (!gst_device_monitor_start(monitor))
     {
         Debug(QS("Failed to start GstDeviceMonitor"));
@@ -423,10 +440,10 @@ enumerateDevices_GStreamer()
         if (v4l2src_factory)
             gst_object_unref(v4l2src_factory);
         gst_object_unref(monitor);
-        return devices;
+        return false;
     }
 
-    //Enumerate devices
+    //Enumerate discovered devices
     GList *device_list = gst_device_monitor_get_devices(monitor);
     int device_count = 0;
     for (GList *item = device_list; item != 0; item = item->next)
@@ -436,7 +453,6 @@ enumerateDevices_GStreamer()
         gchar *device_class = gst_device_get_device_class(device);
 
         //Resolve device identifier
-        //Prefer an actual /dev/videoN path when the driver exposes it
         GstStructure *props = gst_device_get_properties(device);
         QString identifier;
         if (props)
@@ -449,8 +465,8 @@ enumerateDevices_GStreamer()
             }
             gst_structure_free(props);
         }
-        
-        //Fallback: try /dev/videoN by index
+
+        //Fallback to /dev/videoN by index
         if (identifier.isEmpty())
         {
             QString fallback_path = QString("/dev/video%1").arg(device_count);
@@ -462,7 +478,6 @@ enumerateDevices_GStreamer()
             }
             else
             {
-                //Last resort: placeholder identifier
                 identifier = QString("gstreamer:%1").arg(device_count);
                 Debug(QS("WARNING: Could not determine device path, using placeholder: <%s>", CSTR(identifier)));
             }
@@ -486,8 +501,25 @@ enumerateDevices_GStreamer()
     gst_device_monitor_stop(monitor);
     gst_object_unref(monitor);
 
+    //Allow empty camera list as a valid result
+    if (devices.isEmpty())
+    {
+        //Log non-fatal runtime diagnostics for empty results
+        logGStreamerCameraPathCheck();
+        Debug(QS("GStreamer enumeration successful: no cameras detected"));
+        return true;
+    }
+
     Debug(QS("Enumeration complete, found %lld GStreamer webcam(s)", static_cast<long long>(devices.size())));
-    
+
+    return true;
+}
+
+QList<ScanDeviceInfo>
+enumerateDevices_GStreamer()
+{
+    QList<ScanDeviceInfo> devices;
+    enumerateDevices_GStreamer(devices);
     return devices;
 }
 

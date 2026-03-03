@@ -157,14 +157,14 @@ endif()
 set(SOURCES
     src/main.cpp
     src/core_classlogger.cpp
+    src/core_runtime_selfcheck.cpp
     src/core_settingsmanager.cpp
     src/core_profilesettings.cpp
     
     # Processing - always available (Qt-only)
-    src/processing_image_processor.cpp
-    src/processing_crop_processor.cpp
-    src/processing_rotate_processor.cpp
-    src/processing_border_detector.cpp
+    src/processing_scan_crop_detector.cpp
+    src/processing_page_renderer.cpp
+    src/processing_camera_crop_detector.cpp
     
     # Document model
     src/document_scanned_page.cpp
@@ -204,10 +204,6 @@ if(QSCAN_HAVE_QTCAMERA)
     list(APPEND SOURCES src/scan_webcam_source_qtcamera.cpp)
 endif()
 
-# Always build SmartCaptureProcessor
-# It compiles without OpenCV (stubbed) and reports isAvailable()=false
-list(APPEND SOURCES src/processing_smart_capture_processor.cpp)
-
 # Header files with Q_OBJECT that need MOC processing
 set(HEADERS_WITH_MOC
     inc/document/document.hpp
@@ -216,7 +212,6 @@ set(HEADERS_WITH_MOC
     inc/scan/webcam_source.hpp
     inc/scan/scan_manager.hpp
     inc/scan/mobile_source.hpp
-    inc/processing/smart_capture_processor.hpp
     inc/gui/mainwindow.hpp
     inc/gui/scanpreviewwidget.hpp
     inc/gui/pagelistwidget.hpp

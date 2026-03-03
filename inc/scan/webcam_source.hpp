@@ -21,6 +21,7 @@
 #ifndef SCAN_WEBCAM_SOURCE_HPP
 #define SCAN_WEBCAM_SOURCE_HPP
 
+#include <QElapsedTimer>
 #include <QTimer>
 #include <memory>
 
@@ -34,6 +35,9 @@ class WebcamSource : public ScanSource
     Q_OBJECT
 
 public:
+
+    static bool
+    enumerateDevices(QList<ScanDeviceInfo> &devices);
 
     static QList<ScanDeviceInfo>
     enumerateDevices();
@@ -92,6 +96,9 @@ private:
     bool m_live_preview_active;
     QTimer *m_preview_timer;
     int m_frame_fail_count;
+    QElapsedTimer m_preview_start_time;
+    QElapsedTimer m_preview_fail_start_time;
+    bool m_preview_restart_attempted;
 
     //Backend instance (owns backend-private state)
     std::unique_ptr<WebcamBackend> m_backend;

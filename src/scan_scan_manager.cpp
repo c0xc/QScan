@@ -30,13 +30,11 @@
 
 #include <QFileInfo>
 #include <QSet>
+#include <QDateTime>
 #include <QXmlStreamReader>
 
-namespace
-{
-
-static QString
-esclSuggestedLabelFromScannerCapabilitiesXml(const QByteArray &caps)
+QString
+ScanManager::esclSuggestedLabelFromScannerCapabilitiesXml(const QByteArray &caps)
 {
     if (caps.isEmpty())
         return QString();
@@ -60,10 +58,10 @@ esclSuggestedLabelFromScannerCapabilitiesXml(const QByteArray &caps)
     return QString();
 }
 
-} //namespace
-
 ScanManager::ScanManager(QObject *parent)
-           : QObject(parent)
+           : QObject(parent),
+             m_device_cache_valid(false),
+             m_devices_cached_at_ms(0)
 {
 }
 
@@ -74,6 +72,24 @@ ScanManager::~ScanManager()
 bool
 ScanManager::initialize()
 {
+    //Reuse recent enumeration cache
+    const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
+    if (m_device_cache_valid && m_devices_cached_at_ms > 0)
+    {
+        const qint64 age_ms = now_ms - m_devices_cached_at_ms;
+        if (age_ms >= 0 && age_ms < kDeviceCacheTtlMs)
+        {
+            Debug(QS("Initialization using cached device list (age_ms=%lld count=%lld)",
+                     static_cast<long long>(age_ms),
+                     static_cast<long long>(m_devices.count())));
+            return true;
+        }
+
+        Debug(QS("Device cache expired (age_ms=%lld ttl_ms=%lld), refreshing",
+                 static_cast<long long>(age_ms),
+                 static_cast<long long>(kDeviceCacheTtlMs)));
+    }
+
     //Reset device list
     Debug(QS("Initializing, clearing device list"));
     m_devices.clear();
@@ -85,6 +101,10 @@ ScanManager::initialize()
     //Enumerate cameras
     Debug(QS("Enumerating camera devices..."));
     enumerateCameras();
+
+    //Update enumeration cache timestamp
+    m_device_cache_valid = true;
+    m_devices_cached_at_ms = QDateTime::currentMSecsSinceEpoch();
 
     Debug(QS("Initialization complete, total %lld device(s) found", static_cast<long long>(m_devices.count())));
     return true; //always succeed - even if no devices found
@@ -258,8 +278,12 @@ ScanManager::testEsclEndpoint(const QString &user_input,
 void
 ScanManager::enumerateScanners()
 {
-    //Enumerate devices via scanner backends
-    QList<ScanDeviceInfo> sane_devices = ScannerSource::enumerateDevices();
+    //Enumerate scanner backends
+    QList<ScanDeviceInfo> sane_devices;
+    const bool sane_ok = ScannerSource::enumerateDevices(sane_devices);
+    if (!sane_ok)
+        Debug(QS("Scanner enumeration failed - backend initialization or SANE query issue"));
+
     const long long raw_sane_count = static_cast<long long>(sane_devices.count());
     Debug(QS("SANE enumeration raw returned %lld device(s)", raw_sane_count));
 
@@ -305,7 +329,7 @@ ScanManager::enumerateScanners()
     m_devices.append(scanner_devices);
     m_devices.append(camera_devices_from_sane);
 
-    //Append user-configured network scanners (eSCL)
+    //Append configured eSCL endpoints
     QSet<QString> seen;
     foreach (const ScanDeviceInfo &dev, m_devices)
         seen.insert(dev.name);
@@ -313,7 +337,7 @@ ScanManager::enumerateScanners()
     ProfileSettings *settings = ProfileSettings::useDefaultProfile();
     QVariantList list = settings->variant("network_scanners").toList();
 
-    //Migrate older entries to include an explicit ignore_cert_error flag
+    //Migrate legacy endpoint settings
     bool list_changed = false;
     for (int i = 0; i < list.size(); ++i)
     {
@@ -335,7 +359,7 @@ ScanManager::enumerateScanners()
         settings->save();
     }
 
-    //Add endpoints from profile settings
+    //Append endpoints from profile settings
     int added = 0;
     foreach (const QVariant &v, list)
     {
@@ -362,11 +386,21 @@ ScanManager::enumerateScanners()
 void
 ScanManager::enumerateCameras()
 {
-    //Enumerate camera devices
-    QList<ScanDeviceInfo> camera_devices = WebcamSource::enumerateDevices();
+    //Run backend camera enumeration
+    QList<ScanDeviceInfo> camera_devices;
+    bool success = enumerateCameras(camera_devices);
+
+    //Handle backend failure separately from empty result
+    if (!success)
+    {
+        //Keep existing list unchanged on backend failure
+        Debug(QS("Camera enumeration failed - likely backend initialization issue"));
+        return;
+    }
+
     Debug(QS("Camera enumeration returned %lld device(s)", static_cast<long long>(camera_devices.count())));
 
-    //Avoid duplicates
+    //Append only new camera devices
     QSet<QString> seen;
     foreach (const ScanDeviceInfo &dev, m_devices)
         seen.insert(dev.name);
@@ -378,4 +412,11 @@ ScanManager::enumerateCameras()
         m_devices.append(dev);
         seen.insert(dev.name);
     }
+}
+
+bool
+ScanManager::enumerateCameras(QList<ScanDeviceInfo> &devices)
+{
+    //Delegate to webcam backend selector
+    return WebcamSource::enumerateDevices(devices);
 }
