@@ -89,6 +89,7 @@ ScanManager::initialize()
                  static_cast<long long>(age_ms),
                  static_cast<long long>(kDeviceCacheTtlMs)));
     }
+    m_device_cache_valid = false;
 
     //Reset device list
     Debug(QS("Initializing, clearing device list"));
@@ -383,7 +384,7 @@ ScanManager::enumerateScanners()
         Debug(QS("Added %d eSCL endpoint(s) from profile settings", added));
 }
 
-void
+bool
 ScanManager::enumerateCameras()
 {
     //Run backend camera enumeration
@@ -395,7 +396,9 @@ ScanManager::enumerateCameras()
     {
         //Keep existing list unchanged on backend failure
         Debug(QS("Camera enumeration failed - likely backend initialization issue"));
-        return;
+        emit enumerationWarning(QStringLiteral("Camera"),
+            tr("Camera backend failed to initialize."));
+        return false;
     }
 
     Debug(QS("Camera enumeration returned %lld device(s)", static_cast<long long>(camera_devices.count())));
@@ -412,6 +415,8 @@ ScanManager::enumerateCameras()
         m_devices.append(dev);
         seen.insert(dev.name);
     }
+
+    return true;
 }
 
 bool

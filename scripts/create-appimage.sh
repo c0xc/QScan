@@ -260,19 +260,29 @@ for qt_path in $QT_PLUGIN_PATHS; do
         cp -r "$qt_path/xcbglintegrations" "$APPDIR/usr/plugins/" 2>/dev/null || true
         
         # Bundle Qt Multimedia plugins
-        # In QtCamera mode (QSCAN_ENABLE_GSTREAMER=OFF), keep FFmpeg preferred and
-        # skip Qt GStreamer multimedia plugin by default to avoid the freeze path.
-        # In GStreamer backend mode, keep the Qt GStreamer plugin by default.
+        # At least one multimedia backend plugin MUST end up in the AppImage,
+        # otherwise Qt returns 0 cameras and the app has no webcam support.
+        # The Qt build in this container only has the GStreamer multimedia plugin
+        # (FFmpeg-devel is not installed, so Qt did not build libffmpegmediaplugin).
+        # Bundle whatever is available. Never leave the directory empty.
         mkdir -p "$APPDIR/usr/plugins/multimedia"
+        MULTIMEDIA_PLUGIN_BUNDLED=0
         if [ -f "$qt_path/multimedia/libffmpegmediaplugin.so" ]; then
-            echo "    Bundling FFmpeg multimedia plugin (preferred)"
-            cp "$qt_path/multimedia/libffmpegmediaplugin.so" "$APPDIR/usr/plugins/multimedia/" 2>/dev/null || true
+            echo "    Bundling FFmpeg multimedia plugin"
+            cp "$qt_path/multimedia/libffmpegmediaplugin.so" "$APPDIR/usr/plugins/multimedia/"
+            MULTIMEDIA_PLUGIN_BUNDLED=1
         fi
-        if [ "$QSCAN_APPIMAGE_INCLUDE_GSTREAMER_PLUGIN" = "1" ] && [ -f "$qt_path/multimedia/libgstreamermediaplugin.so" ]; then
-            echo "    Bundling GStreamer multimedia plugin (debug opt-in)"
-            cp "$qt_path/multimedia/libgstreamermediaplugin.so" "$APPDIR/usr/plugins/multimedia/" 2>/dev/null || true
-        elif [ -f "$qt_path/multimedia/libgstreamermediaplugin.so" ]; then
-            echo "    Skipping GStreamer multimedia plugin (QtCamera mode freeze guard)"
+        if [ -f "$qt_path/multimedia/libgstreamermediaplugin.so" ]; then
+            if [ "$QSCAN_APPIMAGE_INCLUDE_GSTREAMER_PLUGIN" = "1" ] || [ "$MULTIMEDIA_PLUGIN_BUNDLED" -eq 0 ]; then
+                echo "    Bundling GStreamer multimedia plugin"
+                cp "$qt_path/multimedia/libgstreamermediaplugin.so" "$APPDIR/usr/plugins/multimedia/"
+                MULTIMEDIA_PLUGIN_BUNDLED=1
+            else
+                echo "    Skipping GStreamer multimedia plugin (FFmpeg already bundled)"
+            fi
+        fi
+        if [ "$MULTIMEDIA_PLUGIN_BUNDLED" -eq 0 ]; then
+            echo "    WARNING: No Qt Multimedia backend plugin found — webcam support will be broken!"
         fi
         
         # Bundle dependencies of Qt plugins by analyzing original plugin files

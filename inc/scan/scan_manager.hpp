@@ -57,6 +57,11 @@ public:
                      QString &error_out,
                      QString &suggested_label_out);
 
+signals:
+
+    void
+    enumerationWarning(const QString &backend, const QString &message);
+
 private:
 
     static constexpr qint64 kDeviceCacheTtlMs = 10LL * 60LL * 1000LL; //10min timeout for cached device list
@@ -71,7 +76,9 @@ private:
     void
     enumerateScanners();
 
-    void
+    //Returns false if camera enumeration failed (broken lib env?)
+    //Returns true if successful or no cameras present (hardware absent)
+    bool
     enumerateCameras();
 
     bool
