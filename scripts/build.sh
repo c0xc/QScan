@@ -3,7 +3,7 @@
 #
 # Usage: ./scripts/build.sh [--rebuild-container] [--no-gst]
 #   --rebuild-container: Force rebuild of the container image
-#   --no-gst: Build without GStreamer (forces QtCamera-only webcam backend if enabled)
+#   --no-gst: Compile default QCamera backend instead of GStreamer backend
 
 set -e
 
@@ -17,7 +17,7 @@ BUILD_IMAGE="qscan-fedora-36"
 
 # CMake feature flags
 CMAKE_FLAGS=(
-    # -DQSCAN_ENABLE_GSTREAMER=ON
+    #-DQSCAN_ENABLE_GSTREAMER=ON
     -DQSCAN_ENABLE_QPDF=ON
     -DQSCAN_ENABLE_OPENCV=ON
 )

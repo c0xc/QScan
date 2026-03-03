@@ -156,10 +156,14 @@ main(int argc, char *argv[])
 
     //Initialize scan manager
     ScanManager scan_manager;
+    QObject::connect(&scan_manager, &ScanManager::enumerationWarning, [](const QString &backend, const QString &msg)
+    { //TODO move this to window for delayed error popup or frame
+        QMessageBox::warning(0, 
+            QString("%1 module error").arg(backend), //TODO
+            msg);
+    });
     if (!scan_manager.initialize())
     {
-        QMessageBox::critical(0, QObject::tr("Initialization Error"),
-                            QObject::tr("Failed to initialize scan manager."));
         return 1;
     }
 
