@@ -18,7 +18,7 @@ A document scanning application for Linux!
 Download
 ---
 
-Ready-to-use AppImage executable files are available on the [release page](releases/latest).
+Ready-to-use AppImage executable files are available on the [release page](https://github.com/c0xc/QScan/releases).
 
 
 
